@@ -1,16 +1,8 @@
 import React from 'react';
 import { useStore } from '../context/StoreContext';
-import { FileFormat, ProductType } from '../types';
+import { FileFormat } from '../types';
 import { BannerSlider } from './BannerSlider';
-import { 
-  Sparkles, 
-  Building2, 
-  CreditCard, 
-  Package, 
-  FileCheck,
-  FolderTree,
-  Briefcase
-} from 'lucide-react';
+import { FolderTree } from 'lucide-react';
 
 const FORMATS: (FileFormat | 'all')[] = [
   'all',
@@ -24,9 +16,6 @@ const FORMATS: (FileFormat | 'all')[] = [
 
 export const Hero: React.FC = () => {
   const { 
-    products,
-    selectedProductType,
-    setSelectedProductType,
     selectedCollectionId,
     setSelectedCollectionId,
     selectedFormat,
@@ -35,25 +24,6 @@ export const Hero: React.FC = () => {
     setSortBy,
     collections
   } = useStore();
-
-  const getTypeMeta = (type: string) => {
-    const lower = type.toLowerCase();
-    if (lower === 'all') return { label: 'Todos os Itens', icon: Sparkles };
-    if (lower === 'digital') return { label: 'Arquivos Digitais', icon: FileCheck };
-    if (lower === 'llc' || lower.includes('llc') || lower.includes('usa')) return { label: type === 'llc' ? 'Kits LLC & USA' : type, icon: Building2 };
-    if (lower === 'contas' || lower.includes('conta') || lower.includes('banc')) return { label: type === 'contas' ? 'Contas & Validações' : type, icon: CreditCard };
-    if (lower.includes('serviço') || lower.includes('consultoria') || lower.includes('assessoria') || lower.includes('mentoria')) return { label: type, icon: Briefcase };
-    return { label: type.charAt(0).toUpperCase() + type.slice(1), icon: FileCheck };
-  };
-
-  const baseTypeIds = ['all', 'digital', 'llc', 'contas'];
-  const customTypes = Array.from(new Set(products.map(p => p.productType).filter(Boolean)))
-    .filter(t => !baseTypeIds.includes(t.toLowerCase()) && t.toLowerCase() !== 'fisico');
-
-  const typeFilters = [...baseTypeIds, ...customTypes].map(id => ({
-    id,
-    ...getTypeMeta(id)
-  }));
 
   return (
     <section className="bg-surface border-b border-borderSoft pt-5 sm:pt-12 pb-5 sm:pb-8">
@@ -116,34 +86,9 @@ export const Hero: React.FC = () => {
           </div>
         </div>
 
-        {/* Type & Format Filters (Clean, unified layout for mobile & desktop) */}
-        <div className="mt-4 pt-4 border-t border-borderSoft space-y-3">
-          
-          {/* Row 1: Type Pills with smooth touch scroll */}
-          <div className="overflow-x-auto no-scrollbar scroll-smooth flex items-center gap-1.5 py-1">
-            {typeFilters.map((t) => {
-              const Icon = t.icon;
-              const isSelected = selectedProductType === t.id;
-
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedProductType(t.id)}
-                  className={`px-3 py-1.5 rounded-sm text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap border shrink-0 active:scale-95 ${
-                    isSelected
-                      ? 'bg-primary-tint border-primary text-primary-pressed font-semibold'
-                      : 'bg-surface border-borderSoft text-ink-muted hover:bg-surface-warm hover:text-ink'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5 shrink-0" />
-                  <span>{t.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Row 2: Dropdowns - full width 2-column grid on mobile, inline on desktop */}
-          <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:justify-end sm:items-center text-xs">
+        {/* Format and sort filters */}
+        <div className="mt-4 pt-4 border-t border-borderSoft">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end sm:items-center text-xs">
             <div className="flex items-center gap-1.5 bg-surface-warm border border-borderSoft rounded-sm px-2.5 py-1.5">
               <span className="text-ink-muted text-[11px] shrink-0">Formato:</span>
               <select
@@ -174,7 +119,6 @@ export const Hero: React.FC = () => {
               </select>
             </div>
           </div>
-
         </div>
 
       </div>

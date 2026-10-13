@@ -115,7 +115,7 @@ export const ProductGrid: React.FC = () => {
           </div>
           <h3 className="font-semibold text-base text-ink">Nenhum item encontrado</h3>
           <p className="text-xs text-ink-muted max-w-sm mx-auto">
-            Não encontramos arquivos ou serviços correspondentes aos filtros ativos. Tente selecionar "Todos os Tipos" ou outra coleção.
+            Não encontramos arquivos ou serviços correspondentes aos filtros ativos. Tente selecionar outro formato ou coleção.
           </p>
           <button
             onClick={() => {
