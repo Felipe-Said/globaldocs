@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Production output
+dist/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Vercel local metadata
+.vercel/
+
+# Logs and editor files
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

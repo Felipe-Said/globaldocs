@@ -1,0 +1,1085 @@
+import React, { useState, useEffect } from 'react';
+import { useStore } from '../context/StoreContext';
+import { detectBrands } from '../utils/brandDetection';
+import { detectCountries } from '../utils/countryDetection';
+import { CountryBadgesList } from './CountryBadge';
+import { GATEWAY_LOGOS } from '../utils/gatewayLogos';
+import { Order, PaymentMethod } from '../types';
+import { useNavigate } from 'react-router-dom';
+import { 
+  X, 
+  Trash2, 
+  ShoppingBag, 
+  ArrowRight, 
+  Tag, 
+  ShieldCheck, 
+  Check,
+  Zap,
+  Clock,
+  ChevronLeft,
+  Lock,
+  QrCode,
+  CreditCard,
+  Copy,
+  Download,
+  CheckCircle2,
+  Package,
+  Truck,
+  ExternalLink,
+  Coins
+} from 'lucide-react';
+
+export type CartPhase = 'cart' | 'customer' | 'payment' | 'success';
+
+export const CartDrawer: React.FC = () => {
+  const { 
+    isCartOpen, 
+    setIsCartOpen, 
+    isCheckoutOpen,
+    setIsCheckoutOpen,
+    cart, 
+    removeFromCart, 
+    clearCart,
+    subtotal, 
+    discount, 
+    total, 
+    appliedCoupon, 
+    applyCoupon, 
+    removeCoupon,
+    createOrder,
+    downloadFile,
+    settings 
+  } = useStore();
+
+  const navigate = useNavigate();
+
+  // Fase atual do fluxo no carrinho
+  const [phase, setPhase] = useState<CartPhase>('cart');
+
+  // Dados do Comprador (Fase 2)
+  const [name, setName] = useState('Samuel Silva');
+  const [email, setEmail] = useState('samuel@exemplo.com');
+  const [document, setDocument] = useState('123.456.789-00');
+  const [shippingAddress, setShippingAddress] = useState('Av. Paulista, 1000, Bela Vista - São Paulo/SP, CEP 01310-100');
+
+  // Método de Pagamento (Fase 3)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [cardNumber, setCardNumber] = useState('4532 •••• •••• 8829');
+  const [cardExpiry, setCardExpiry] = useState('10/29');
+  const [cardCvv, setCardCvv] = useState('789');
+  const [cardName, setCardName] = useState('SAMUEL SILVA');
+  const [installments, setInstallments] = useState('1');
+
+  // Pedido Concluído (Fase 4)
+  const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+  const [copiedPix, setCopiedPix] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [copiedLogins, setCopiedLogins] = useState(false);
+  const [copiedProxy, setCopiedProxy] = useState(false);
+
+  // Estados de Cupom e Animações
+  const [couponInput, setCouponInput] = useState('');
+  const [couponError, setCouponError] = useState('');
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [checkoutBtnState, setCheckoutBtnState] = useState<'idle' | 'loading' | 'success'>('idle');
+
+  // Oferta Relâmpago (20 minutos)
+  const [timeLeft, setTimeLeft] = useState<number>(20 * 60);
+  const [flashDiscountActive, setFlashDiscountActive] = useState<boolean>(true);
+
+  // Quando isCheckoutOpen for ativado externamente, avançar direto para a fase de checkout
+  useEffect(() => {
+    if (isCheckoutOpen) {
+      if (cart.length > 0) {
+        setPhase('customer');
+      }
+      setIsCartOpen(true);
+    }
+  }, [isCheckoutOpen]);
+
+  // Se o carrinho ficar vazio e ainda estiver nas fases de compra, voltar para 'cart'
+  useEffect(() => {
+    if (cart.length === 0 && phase !== 'success') {
+      setPhase('cart');
+    }
+  }, [cart.length, phase]);
+
+  // Timer da oferta relâmpago
+  useEffect(() => {
+    if (!flashDiscountActive || timeLeft <= 0) return;
+    const interval = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setFlashDiscountActive(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [flashDiscountActive, timeLeft]);
+
+  const formatTimer = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatPrice = (value: number) => {
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  // Fechar gaveta com reset após transição
+  const handleClose = () => {
+    setIsCartOpen(false);
+    setIsCheckoutOpen(false);
+    setTimeout(() => {
+      if (phase === 'success') {
+        setPhase('cart');
+        setCompletedOrder(null);
+      }
+    }, 500);
+  };
+
+  // Ativar 15% OFF da oferta relâmpago
+  const handleClaimFlashDiscount = () => {
+    applyCoupon('LLCPROMO');
+  };
+
+  const handleApplyCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!couponInput.trim()) return;
+    const res = applyCoupon(couponInput);
+    if (!res.success) {
+      setCouponError(res.message);
+    } else {
+      setCouponError('');
+      setCouponInput('');
+    }
+  };
+
+  // Remoção animada do item
+  const handleAnimatedRemove = (productId: string) => {
+    setRemovingId(productId);
+    setTimeout(() => {
+      removeFromCart(productId);
+      setRemovingId(null);
+    }, 380);
+  };
+
+  // Avançar da Fase 1 (Carrinho) para Fase 2 (Identificação)
+  const handleGoToCustomerPhase = () => {
+    if (cart.length === 0) return;
+    setPhase('customer');
+  };
+
+  // Avançar da Fase 2 (Identificação) para Fase 3 (Pagamento)
+  const handleGoToPaymentPhase = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !email.trim() || !document.trim()) return;
+    setPhase('payment');
+  };
+
+  // Finalização do Pagamento na Fase 3
+  const handleProcessFinalPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (checkoutBtnState !== 'idle') return;
+
+    // 1. Estado Loading (Texto sobe, entra spinner)
+    setCheckoutBtnState('loading');
+
+    // 2. Transição para Sucesso com morphing para verde esmeralda
+    setTimeout(() => {
+      setCheckoutBtnState('success');
+
+      // 3. Criação oficial do pedido e avanço para tela de Sucesso
+      setTimeout(() => {
+        const order = createOrder({
+          customerName: name,
+          customerEmail: email,
+          customerDocument: document,
+          paymentMethod: paymentMethod,
+        });
+
+        setCompletedOrder(order);
+        clearCart();
+        setPhase('success');
+        setCheckoutBtnState('idle');
+      }, 700);
+    }, 1200);
+  };
+
+  // Chave Pix Copia e Cola
+  const pixKeyCopiaCola = `00020126580014br.gov.bcb.pix0136${settings.pixKey}520400005303986540${total.toFixed(2)}5802BR5913${settings.storeName}6009SAO PAULO62070503***6304E8A2`;
+
+  const handleCopyPix = () => {
+    navigator.clipboard.writeText(pixKeyCopiaCola);
+    setCopiedPix(true);
+    setTimeout(() => setCopiedPix(false), 2500);
+  };
+
+  const handleCopyToken = (token: string) => {
+    navigator.clipboard.writeText(token);
+    setCopiedToken(true);
+    setTimeout(() => setCopiedToken(false), 2500);
+  };
+
+  return (
+    <div 
+      className={`fixed inset-0 z-50 overflow-hidden flex items-end sm:items-stretch justify-end transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        isCartOpen 
+          ? 'opacity-100 pointer-events-auto bg-black/40 backdrop-blur-md' 
+          : 'opacity-0 pointer-events-none bg-black/0 backdrop-blur-none'
+      }`}
+      onClick={handleClose}
+    >
+      {/* Drawer Lateral com cantos arredondados estilo Apple */}
+      <div 
+        className={`bg-white w-full sm:max-w-md h-[92vh] sm:h-full rounded-t-2xl sm:rounded-t-none sm:rounded-l-2xl shadow-[-10px_0_40px_rgba(0,0,0,0.12)] flex flex-col relative transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden ${
+          isCartOpen 
+            ? 'translate-y-0 sm:translate-x-0' 
+            : 'translate-y-full sm:translate-x-full sm:translate-y-0'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Mobile Grab Notch */}
+        <div className="w-12 h-1.5 rounded-full bg-neutral-200 mx-auto mt-2.5 sm:hidden shrink-0" />
+
+        {/* ========================================================
+            DRAWER HEADER COM NAVEGAÇÃO DE ETAPAS
+        ======================================================== */}
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-gray-100 bg-white relative z-10 shrink-0">
+          <div className="flex items-center gap-2">
+            {phase === 'customer' && (
+              <button
+                onClick={() => setPhase('cart')}
+                className="p-1.5 -ml-1 rounded-full text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors cursor-pointer"
+                title="Voltar ao carrinho"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            )}
+            {phase === 'payment' && (
+              <button
+                onClick={() => setPhase('customer')}
+                className="p-1.5 -ml-1 rounded-full text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors cursor-pointer"
+                title="Voltar aos dados"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            )}
+
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 tracking-tight">
+                  {phase === 'cart' && 'Seu Carrinho'}
+                  {phase === 'customer' && 'Identificação'}
+                  {phase === 'payment' && 'Pagamento Seguro'}
+                  {phase === 'success' && 'Pedido Confirmado! 🎉'}
+                </h2>
+                {phase === 'cart' && cart.length > 0 && (
+                  <span className="bg-gray-100 text-gray-700 text-xs px-2.5 py-0.5 rounded-full font-medium">
+                    {cart.length} {cart.length === 1 ? 'item' : 'itens'}
+                  </span>
+                )}
+              </div>
+              
+              {/* Indicador de Etapas */}
+              {(phase === 'customer' || phase === 'payment') && (
+                <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-medium mt-0.5">
+                  <span className={phase === 'customer' ? 'text-indigo-600 font-semibold' : 'text-gray-500'}>
+                    1. Dados
+                  </span>
+                  <span>•</span>
+                  <span className={phase === 'payment' ? 'text-indigo-600 font-semibold' : 'text-gray-500'}>
+                    2. Pagamento
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <button 
+            onClick={handleClose}
+            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors cursor-pointer focus:outline-none"
+            aria-label="Fechar gaveta"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* ========================================================
+            CORPO DO DRAWER (TRANSIÇÃO ENTRE FASES)
+        ======================================================== */}
+        <div className="relative flex-1 overflow-hidden flex flex-col bg-white">
+
+          {/* ====================================================
+              FASE 1: CARRINHO (ITENS, OFERTA, CUPOM & TOTAIS)
+          ==================================================== */}
+          {phase === 'cart' && (
+            <>
+              {cart.length === 0 ? (
+                /* Empty State Elegante com animação */
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-6 sm:p-8 animate-fadeIn">
+                  <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6 text-gray-400">
+                    <ShoppingBag className="w-10 h-10 stroke-[1.5]" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    Seu carrinho está vazio
+                  </h3>
+                  <p className="text-gray-500 text-sm mb-8 max-w-xs">
+                    Nenhum documento, kit LLC ou conta adicionada ainda.
+                  </p>
+                  <button 
+                    onClick={handleClose}
+                    className="px-8 py-3.5 bg-black text-white rounded-full font-medium hover:scale-105 active:scale-95 transition-all duration-300 shadow-md cursor-pointer text-sm"
+                  >
+                    Voltar para Loja
+                  </button>
+                </div>
+              ) : (
+                <div className="h-full flex flex-col flex-1 animate-fadeIn">
+                  
+                  {/* Banner de Desconto Relâmpago */}
+                  {flashDiscountActive && (
+                    <div className="px-5 sm:px-6 pt-4 shrink-0">
+                      <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex items-center justify-between shadow-xs transition-all duration-500">
+                        <div className="pr-2">
+                          <span className="text-indigo-800 font-semibold text-sm flex items-center gap-1.5">
+                            <Zap className="w-4 h-4 fill-indigo-600 text-indigo-600" />
+                            Oferta Relâmpago!
+                          </span>
+                          <p className="text-indigo-600 text-xs mt-0.5">
+                            {appliedCoupon ? (
+                              <span>Cupom <strong>{appliedCoupon.code}</strong> ativo ({appliedCoupon.discountPercent}% OFF)</span>
+                            ) : (
+                              <span>15% OFF liberado por tempo limitado.</span>
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <div className="bg-white text-indigo-700 border border-indigo-100 px-3 py-1.5 rounded-lg font-mono font-semibold text-xs shadow-xs timer-active flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                            {formatTimer(timeLeft)}
+                          </div>
+                          {!appliedCoupon && (
+                            <button
+                              onClick={handleClaimFlashDiscount}
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs whitespace-nowrap"
+                            >
+                              Ativar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista de Itens com Remoção Animada */}
+                  <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 space-y-3">
+                    {cart.map((item) => {
+                      const isRemoving = removingId === item.product.id;
+                      const itemBrands = detectBrands(item.product);
+                      const itemCountries = detectCountries(item.product);
+
+                      return (
+                        <div 
+                          key={item.product.id}
+                          className={`cart-item flex items-center gap-4 bg-white border border-gray-100 p-4 rounded-xl shadow-xs transition-all duration-400 ease-[cubic-bezier(0.65,0,0.35,1)] ${
+                            isRemoving 
+                              ? 'opacity-0 -translate-x-5 scale-95 max-h-0 !p-0 !m-0 !border-0 overflow-hidden' 
+                              : 'opacity-100 translate-x-0 scale-100 max-h-40'
+                          }`}
+                        >
+                          {/* Miniatura / Formato */}
+                          <div className="w-16 h-16 sm:w-18 sm:h-18 bg-gray-50 border border-gray-100 rounded-lg flex-shrink-0 flex flex-col items-center justify-center p-2 text-center">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-800 bg-white border border-gray-200 px-1.5 py-0.5 rounded shadow-2xs">
+                              {item.product.format}
+                            </span>
+                            {itemBrands.length > 0 && (
+                              <img
+                                src={itemBrands[0].url}
+                                alt={itemBrands[0].name}
+                                className="w-4 h-4 object-contain mt-1.5"
+                                onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                              />
+                            )}
+                          </div>
+
+                          {/* Informações */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                              {item.product.deliverySpeed === 'immediate' ? (
+                                <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 flex items-center gap-1">
+                                  <Zap className="w-2.5 h-2.5 fill-emerald-600 text-emerald-600" />
+                                  Pronta Entrega
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                                  {item.product.deliveryTime || 'Envio Digital'}
+                                </span>
+                              )}
+
+                              {itemCountries.length > 0 && (
+                                <CountryBadgesList countries={itemCountries} size="sm" />
+                              )}
+                            </div>
+
+                            <h3 className="font-medium text-gray-900 text-sm line-clamp-1">
+                              {item.product.title}
+                            </h3>
+
+                            <div className="mt-1 font-semibold text-gray-900 text-sm">
+                              {formatPrice(item.product.price)}
+                            </div>
+                          </div>
+
+                          {/* Botão Remover */}
+                          <button 
+                            onClick={() => handleAnimatedRemove(item.product.id)}
+                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                            title="Remover do carrinho"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    {/* Formulário de Cupom */}
+                    <div className="pt-2">
+                      <form onSubmit={handleApplyCoupon} className="space-y-1.5">
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <Tag className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                              type="text"
+                              placeholder="Cupom de desconto"
+                              value={couponInput}
+                              onChange={(e) => { setCouponInput(e.target.value); setCouponError(''); }}
+                              className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 uppercase font-medium focus:bg-white focus:border-black focus:outline-none transition-colors"
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            className="h-8.5 px-3.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold border border-gray-200 transition-colors cursor-pointer"
+                          >
+                            Aplicar
+                          </button>
+                        </div>
+                        {couponError && (
+                          <p className="text-[11px] text-red-500">{couponError}</p>
+                        )}
+                        {appliedCoupon && (
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-medium border border-emerald-100">
+                            <span className="flex items-center gap-1.5">
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              Cupom <strong>{appliedCoupon.code}</strong> ({appliedCoupon.discountPercent}% OFF)
+                            </span>
+                            <button 
+                              type="button" 
+                              onClick={removeCoupon} 
+                              className="text-xs underline text-emerald-700 hover:opacity-80 cursor-pointer"
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        )}
+                      </form>
+                    </div>
+                  </div>
+
+                  {/* Rodapé do Carrinho com Resumo e Botão para Avançar */}
+                  <div className="p-5 sm:p-6 border-t border-gray-100 bg-gray-50 shrink-0 space-y-4">
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-gray-500 text-sm">
+                        <span>Subtotal Original</span>
+                        <span className={discount > 0 ? 'line-through text-gray-400' : 'font-medium'}>
+                          {formatPrice(subtotal)}
+                        </span>
+                      </div>
+
+                      {discount > 0 && (
+                        <div className="flex justify-between text-indigo-600 text-sm font-medium animate-fadeIn">
+                          <span>Desconto ({appliedCoupon ? `${appliedCoupon.discountPercent}%` : '15%'})</span>
+                          <span>- {formatPrice(discount)}</span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between text-gray-900 pt-2 border-t border-gray-200/60">
+                        <span className="font-medium text-base sm:text-lg">Total a Pagar</span>
+                        <span className="font-semibold text-lg sm:text-xl">{formatPrice(total)}</span>
+                      </div>
+                    </div>
+
+                    {/* Botão de Avançar com Feedback Tátil */}
+                    <button 
+                      onClick={handleGoToCustomerPhase}
+                      className="w-full bg-black hover:bg-neutral-900 text-white rounded-xl h-[54px] flex items-center justify-center gap-2 font-medium shadow-md transition-all duration-300 active:scale-[0.96] cursor-pointer"
+                    >
+                      <span>Avançar para Identificação</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+
+                    <div className="flex items-center justify-center gap-1.5 text-xs text-gray-500">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Liberação imediata • Pagamento 100% Seguro</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ====================================================
+              FASE 2: IDENTIFICAÇÃO DO CLIENTE (FORMULÁRIO NO CARRINHO)
+          ==================================================== */}
+          {phase === 'customer' && (
+            <form onSubmit={handleGoToPaymentPhase} className="h-full flex flex-col flex-1 animate-fadeIn">
+              
+              {/* Barra de Resumo Compacto do Pedido */}
+              <div className="px-5 sm:px-6 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between text-xs">
+                <span className="text-gray-500">
+                  Total da Compra ({cart.length} {cart.length === 1 ? 'item' : 'itens'})
+                </span>
+                <span className="font-bold text-gray-900 text-sm">
+                  {formatPrice(total)}
+                </span>
+              </div>
+
+              {/* Campos do Formulário */}
+              <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-900 mb-1.5">
+                    Nome Completo *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Ex: Samuel Silva"
+                    className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-black focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-900 mb-1.5">
+                    E-mail para Entrega dos Arquivos *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="seuemail@exemplo.com"
+                    className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-black focus:outline-none transition-colors"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Os links e credenciais serão enviados instantaneamente para este e-mail.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-900 mb-1.5">
+                    CPF ou CNPJ *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={document}
+                    onChange={(e) => setDocument(e.target.value)}
+                    placeholder="000.000.000-00"
+                    className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-black focus:outline-none transition-colors"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Obrigatório para geração do Pix e emissão do recibo oficial.
+                  </p>
+                </div>
+              </div>
+
+              {/* Rodapé com Botão para Avançar para Pagamento */}
+              <div className="p-5 sm:p-6 border-t border-gray-100 bg-gray-50 shrink-0 space-y-3">
+                <button
+                  type="submit"
+                  className="w-full bg-black hover:bg-neutral-900 text-white rounded-xl h-[54px] flex items-center justify-center gap-2 font-medium shadow-md transition-all duration-300 active:scale-[0.96] cursor-pointer"
+                >
+                  <span>Continuar para Pagamento</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                <div className="flex items-center justify-center gap-1 text-[11px] text-gray-500">
+                  <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Ambiente criptografado com SSL de 256 bits</span>
+                </div>
+              </div>
+
+            </form>
+          )}
+
+          {/* ====================================================
+              FASE 3: PAGAMENTO DIRETO NO CARRINHO
+          ==================================================== */}
+          {phase === 'payment' && (
+            <form onSubmit={handleProcessFinalPayment} className="h-full flex flex-col flex-1 animate-fadeIn">
+              
+              {/* Barra de Resumo */}
+              <div className="px-5 sm:px-6 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-gray-500">Cliente: </span>
+                  <span className="font-semibold text-gray-900">{name}</span>
+                </div>
+                <div className="text-right">
+                  <span className="font-bold text-gray-900 text-sm">{formatPrice(total)}</span>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 space-y-4">
+                
+                {/* Seletor de Métodos com Logos Oficiais Sem Bordas */}
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('pix')}
+                    className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                      paymentMethod === 'pix'
+                        ? 'border-black bg-gray-50 font-semibold shadow-xs'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    <img 
+                      src={GATEWAY_LOGOS.pix} 
+                      alt="Pix" 
+                      className="w-5 h-5 object-contain" 
+                      style={{ border: 'none' }} 
+                    />
+                    <span className="text-xs">Pix</span>
+                    <span className="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-full font-bold">5 seg</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('credit_card')}
+                    className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                      paymentMethod === 'credit_card'
+                        ? 'border-black bg-gray-50 font-semibold shadow-xs'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1 h-5">
+                      <img 
+                        src={GATEWAY_LOGOS.visa} 
+                        alt="Visa" 
+                        className="h-2.5 w-auto object-contain" 
+                        style={{ border: 'none' }} 
+                      />
+                      <img 
+                        src={GATEWAY_LOGOS.mastercard} 
+                        alt="Mastercard" 
+                        className="h-3.5 w-auto object-contain" 
+                        style={{ border: 'none' }} 
+                      />
+                    </div>
+                    <span className="text-xs">Cartão</span>
+                    <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.2 rounded-full font-medium">12x</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('crypto')}
+                    className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                      paymentMethod === 'crypto'
+                        ? 'border-black bg-gray-50 font-semibold shadow-xs'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    <img 
+                      src={GATEWAY_LOGOS.usdt} 
+                      alt="USDT" 
+                      className="w-5 h-5 object-contain" 
+                      style={{ border: 'none' }} 
+                    />
+                    <span className="text-xs">USDT</span>
+                    <span className="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-full font-medium">Crypto</span>
+                  </button>
+                </div>
+
+                {/* Conteúdo: PIX */}
+                {paymentMethod === 'pix' && (
+                  <div className="bg-gray-50 border border-gray-200 p-4 rounded-xl space-y-3.5 text-center animate-fadeIn">
+                    <div className="flex items-center justify-center gap-2 text-xs font-semibold text-emerald-800">
+                      <img 
+                        src={GATEWAY_LOGOS.pix} 
+                        alt="Pix" 
+                        className="w-4 h-4 object-contain" 
+                        style={{ border: 'none' }} 
+                      />
+                      <span>Aprovação Automática e Imediata</span>
+                    </div>
+
+                    {/* QR Code Simulado SVG */}
+                    <div className="w-40 h-40 bg-white p-2.5 mx-auto rounded-xl border border-gray-200 shadow-xs flex items-center justify-center">
+                      <svg viewBox="0 0 100 100" className="w-full h-full text-neutral-900 fill-current">
+                        <path d="M0 0h35v35h-35zM5 5h25v25h-25zM10 10h15v15h-15zM65 0h35v35h-35zM70 5h25v25h-25zM75 10h15v15h-15zM0 65h35v35h-35zM5 70h25v25h-25zM10 75h15v15h-15zM45 10h10v10h-10zM45 35h10v10h-10zM45 55h10v10h-10zM45 75h10v10h-10zM65 45h10v10h-10zM65 65h10v10h-10zM85 45h10v10h-10zM85 75h10v10h-10zM25 45h10v10h-10zM5 45h10v10h-10zM65 85h25v10h-25z" />
+                      </svg>
+                    </div>
+
+                    {/* Copia e Cola */}
+                    <div>
+                      <div className="text-[11px] text-gray-500 mb-1">
+                        Código Pix Copia e Cola:
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={pixKeyCopiaCola}
+                          className="flex-1 px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg text-gray-700 font-mono truncate focus:outline-none select-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleCopyPix}
+                          className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+                            copiedPix ? 'bg-emerald-600 text-white' : 'bg-black text-white hover:bg-neutral-800'
+                          }`}
+                        >
+                          {copiedPix ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedPix ? 'Copiado!' : 'Copiar'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Conteúdo: Cartão de Crédito */}
+                {paymentMethod === 'credit_card' && (
+                  <div className="space-y-3 animate-fadeIn">
+                    {/* Logos de Bandeiras sem Bordas */}
+                    <div className="flex items-center justify-between pb-1 border-b border-gray-100">
+                      <span className="text-[11px] font-semibold text-gray-600">Bandeiras aceitas:</span>
+                      <div className="flex items-center gap-2">
+                        <img src={GATEWAY_LOGOS.visa} alt="Visa" className="h-2.5 w-auto object-contain" style={{ border: 'none' }} />
+                        <img src={GATEWAY_LOGOS.mastercard} alt="Mastercard" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />
+                        <img src={GATEWAY_LOGOS.elo} alt="Elo" className="h-2.5 w-auto object-contain" style={{ border: 'none' }} />
+                        <img src={GATEWAY_LOGOS.amex} alt="Amex" className="h-3 w-auto object-contain" style={{ border: 'none' }} />
+                        <img src={GATEWAY_LOGOS.stripe} alt="Stripe" className="h-3 w-auto object-contain" style={{ border: 'none' }} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                        Número do Cartão
+                      </label>
+                      <input
+                        type="text"
+                        value={cardNumber}
+                        onChange={(e) => setCardNumber(e.target.value)}
+                        placeholder="0000 0000 0000 0000"
+                        className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:bg-white focus:border-black focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                          Validade
+                        </label>
+                        <input
+                          type="text"
+                          value={cardExpiry}
+                          onChange={(e) => setCardExpiry(e.target.value)}
+                          placeholder="MM/AA"
+                          className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-center focus:bg-white focus:border-black focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                          CVV
+                        </label>
+                        <input
+                          type="text"
+                          value={cardCvv}
+                          onChange={(e) => setCardCvv(e.target.value)}
+                          placeholder="123"
+                          className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-center font-mono focus:bg-white focus:border-black focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                        Parcelamento
+                      </label>
+                      <select
+                        value={installments}
+                        onChange={(e) => setInstallments(e.target.value)}
+                        className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:bg-white focus:border-black focus:outline-none cursor-pointer"
+                      >
+                        <option value="1">1x de {formatPrice(total)} (à vista)</option>
+                        <option value="2">2x de {formatPrice(total / 2)} sem juros</option>
+                        <option value="3">3x de {formatPrice(total / 3)} sem juros</option>
+                        <option value="6">6x de {formatPrice(total / 6)} sem juros</option>
+                        <option value="12">12x de {formatPrice(total / 12)}</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Conteúdo: USDT */}
+                {paymentMethod === 'crypto' && (
+                  <div className="bg-amber-50/70 border border-amber-200 p-4 rounded-xl space-y-2 text-xs text-amber-950 animate-fadeIn">
+                    <div className="flex items-center gap-2">
+                      <img 
+                        src={GATEWAY_LOGOS.usdt} 
+                        alt="USDT" 
+                        className="w-4 h-4 object-contain" 
+                        style={{ border: 'none' }} 
+                      />
+                      <span className="font-bold text-amber-900">
+                        Pagamento em USDT (TRC-20)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-800">
+                      Envie o equivalente a <strong>{(total / 5.2).toFixed(2)} USDT</strong> para a carteira oficial:
+                    </p>
+                    <div className="bg-white p-2 rounded border border-amber-200 font-mono text-[10px] break-all select-all">
+                      TY2kL9m8XQ5zE1n2B4vC6w7P8o0R1s2T3u
+                    </div>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Rodapé com Botão Animado de Finalização (Tactile Press & Morphing) */}
+              <div className="p-5 sm:p-6 border-t border-gray-100 bg-gray-50 shrink-0 space-y-3">
+                
+                <button 
+                  id="checkout-btn" 
+                  type="submit"
+                  disabled={checkoutBtnState !== 'idle'}
+                  className={`relative w-full rounded-xl h-[56px] overflow-hidden group shadow-md transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] font-medium active:scale-[0.96] cursor-pointer ${
+                    checkoutBtnState === 'success' 
+                      ? 'bg-emerald-500 text-white' 
+                      : 'bg-black text-white hover:bg-neutral-900'
+                  }`}
+                >
+                  {/* 1. Texto Padrão */}
+                  <div 
+                    className={`absolute inset-0 flex items-center justify-center gap-2 font-medium transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                      checkoutBtnState === 'idle' 
+                        ? 'opacity-100 translate-y-0' 
+                        : 'opacity-0 -translate-y-5 pointer-events-none'
+                    }`}
+                  >
+                    <span>Confirmar e Finalizar Compra ({formatPrice(total)})</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </div>
+
+                  {/* 2. Spinner de Processamento */}
+                  <div 
+                    className={`absolute inset-0 flex items-center justify-center transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                      checkoutBtnState === 'loading' 
+                        ? 'opacity-100 translate-y-0' 
+                        : 'opacity-0 translate-y-5 pointer-events-none'
+                    }`}
+                  >
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+
+                  {/* 3. Ícone de Confirmação Sucesso */}
+                  <div 
+                    className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                      checkoutBtnState === 'success' 
+                        ? 'opacity-100 scale-100' 
+                        : 'opacity-0 scale-50 pointer-events-none'
+                    }`}
+                  >
+                    <Check className="w-7 h-7 text-white stroke-[2.5]" />
+                  </div>
+                </button>
+
+                <div className="space-y-1.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs text-gray-500">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Liberação imediata • Acesso instantâneo garantido</span>
+                  </div>
+
+                  {/* Gateways Trust Bar Sem Bordas */}
+                  <div className="flex items-center justify-center gap-3 pt-0.5 opacity-80">
+                    <img src={GATEWAY_LOGOS.pix} alt="Pix" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />
+                    <img src={GATEWAY_LOGOS.mercadopago} alt="Mercado Pago" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />
+                    <img src={GATEWAY_LOGOS.stripe} alt="Stripe" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />
+                    <img src={GATEWAY_LOGOS.visa} alt="Visa" className="h-2.5 w-auto object-contain" style={{ border: 'none' }} />
+                    <img src={GATEWAY_LOGOS.mastercard} alt="Mastercard" className="h-3 w-auto object-contain" style={{ border: 'none' }} />
+                  </div>
+                </div>
+              </div>
+
+            </form>
+          )}
+
+          {/* ====================================================
+              FASE 4: SUCESSO & LIBERAÇÃO IMEDIATA DOS ARQUIVOS
+          ==================================================== */}
+          {phase === 'success' && completedOrder && (
+            <div className="h-full flex flex-col flex-1 p-5 sm:p-6 overflow-y-auto space-y-5 animate-fadeIn">
+              
+              <div className="text-center pt-2">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center mb-3 shadow-sm animate-bounce">
+                  <CheckCircle2 className="w-9 h-9 stroke-[2.5]" />
+                </div>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                  Pagamento Aprovado Instantaneamente
+                </span>
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">
+                  Obrigado, {completedOrder.customerName}!
+                </h3>
+                <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto">
+                  Seu pedido <strong>#{completedOrder.id}</strong> foi registrado e os acessos liberados abaixo.
+                </p>
+              </div>
+
+              {/* Chave da Licença */}
+              <div className="bg-gray-50 border border-gray-200 p-3.5 rounded-xl text-xs space-y-1.5">
+                <div className="flex items-center justify-between text-gray-500">
+                  <span>Licença Oficial:</span>
+                  <button
+                    onClick={() => handleCopyToken(completedOrder.downloadToken)}
+                    className="text-indigo-600 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedToken ? 'Copiada!' : 'Copiar'}
+                  </button>
+                </div>
+                <div className="font-mono bg-white p-2 rounded border border-gray-200 text-gray-900 select-all font-semibold">
+                  {completedOrder.downloadToken}
+                </div>
+              </div>
+
+              {/* Lista de Itens com Acesso Imediato */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  Seus Arquivos & Acessos Liberados:
+                </h4>
+
+                {completedOrder.items.map((item, idx) => (
+                  <div 
+                    key={idx}
+                    className="bg-white border border-gray-200 p-3.5 rounded-xl space-y-2 shadow-2xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 uppercase">
+                          {item.format}
+                        </span>
+                        <h5 className="font-semibold text-gray-900 text-xs sm:text-sm mt-1">
+                          {item.productTitle}
+                        </h5>
+                      </div>
+                      
+                      {/* Botão de Download */}
+                      <button
+                        onClick={() => downloadFile(item.productTitle, item.downloadFileName || `${item.productTitle}.pdf`, item.format)}
+                        className="px-3 py-1.5 bg-black hover:bg-neutral-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Baixar</span>
+                      </button>
+                    </div>
+
+                    {/* Pronta Entrega: ZIP adicional */}
+                    {item.zipFileName && (
+                      <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                        <span className="text-gray-500 flex items-center gap-1">
+                          <Package className="w-3.5 h-3.5 text-indigo-600" />
+                          Pacote ZIP: {item.zipFileName}
+                        </span>
+                        <button
+                          onClick={() => downloadFile(item.productTitle, item.zipFileName!, 'ZIP')}
+                          className="text-indigo-600 font-semibold hover:underline"
+                        >
+                          Baixar ZIP
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Pronta Entrega: Logins de Acesso */}
+                    {item.accessLogins && (
+                      <div className="p-2.5 bg-gray-50 rounded-lg border border-gray-200 text-xs space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700">
+                          <span>Credenciais de Acesso:</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(item.accessLogins!);
+                              setCopiedLogins(true);
+                              setTimeout(() => setCopiedLogins(false), 2000);
+                            }}
+                            className="text-indigo-600 hover:underline"
+                          >
+                            {copiedLogins ? 'Copiado!' : 'Copiar'}
+                          </button>
+                        </div>
+                        <pre className="font-mono text-[11px] text-gray-800 whitespace-pre-wrap select-all">
+                          {item.accessLogins}
+                        </pre>
+                      </div>
+                    )}
+
+                    {/* Pronta Entrega: Proxies */}
+                    {item.proxyDetails && (
+                      <div className="p-2.5 bg-gray-50 rounded-lg border border-gray-200 text-xs space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-700">
+                          <span>Proxy Dedicado:</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(item.proxyDetails!);
+                              setCopiedProxy(true);
+                              setTimeout(() => setCopiedProxy(false), 2000);
+                            }}
+                            className="text-indigo-600 hover:underline"
+                          >
+                            {copiedProxy ? 'Copiado!' : 'Copiar'}
+                          </button>
+                        </div>
+                        <code className="font-mono text-[11px] text-gray-800 break-all select-all">
+                          {item.proxyDetails}
+                        </code>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Botões de Ação Final */}
+              <div className="pt-2 space-y-2 pb-4">
+                <button
+                  onClick={() => {
+                    handleClose();
+                    navigate('/downloads');
+                  }}
+                  className="w-full bg-black hover:bg-neutral-900 text-white rounded-xl h-[48px] flex items-center justify-center gap-2 font-medium text-sm transition-all cursor-pointer"
+                >
+                  <span>Ir para Meus Downloads</span>
+                  <ExternalLink className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={handleClose}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl h-[44px] flex items-center justify-center text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Concluir e Voltar à Loja
+                </button>
+              </div>
+
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+};

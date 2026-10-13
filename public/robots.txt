@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+
+# Sitemap Oficial GlobalDOCS
+Sitemap: https://globaldocs.com.br/sitemap.xml
