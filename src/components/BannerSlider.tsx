@@ -44,11 +44,7 @@ export const BannerSlider: React.FC = () => {
 
   return (
     <div className="w-full my-4 sm:my-6">
-      {/* 
-        Container de Banner:
-        - SEM BORDAS (border-0 border-none)
-        - Proporção específica para mobile (aspect-[16/9]) e desktop (aspect-[21/7])
-      */}
+      {/* A proporção original de cada imagem é preservada para evitar recortes. */}
       <div 
         onClick={handleClickBanner}
         className={`group relative w-full overflow-hidden rounded-md sm:rounded-lg select-none bg-surface-warm ${
@@ -56,9 +52,8 @@ export const BannerSlider: React.FC = () => {
         }`}
         style={{ border: 'none' }}
       >
-        {/* Responsive Aspect Ratio Wrapper: Mobile 16:9, Desktop 21:7 */}
-        <div className="w-full aspect-[16/9] sm:aspect-[21/7] relative overflow-hidden">
-          <picture className="w-full h-full block">
+        <div className="w-full relative overflow-hidden">
+          <picture className="w-full block">
             {/* Mobile Viewport Source (<= 639px) */}
             <source 
               media="(max-width: 639px)" 
@@ -69,11 +64,11 @@ export const BannerSlider: React.FC = () => {
               media="(min-width: 640px)" 
               srcSet={currentBanner.desktopImageUrl} 
             />
-            {/* Fallback Image: sem bordas, object-cover */}
+            {/* A altura acompanha a proporção natural do arquivo selecionado. */}
             <img 
               src={currentBanner.desktopImageUrl} 
               alt={currentBanner.title}
-              className="w-full h-full object-cover block border-0 border-none outline-none transition-transform duration-700 ease-out group-hover:scale-[1.01]"
+              className="w-full h-auto object-contain block border-0 border-none outline-none"
               style={{ border: 'none', outline: 'none' }}
               loading="eager"
             />

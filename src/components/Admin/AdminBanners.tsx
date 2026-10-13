@@ -128,7 +128,7 @@ export const AdminBanners: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-ink">Banners & Destaques da Loja</h2>
           <p className="text-xs text-ink-muted mt-0.5">
-            Gerencie os banners exibidos na página inicial com proporções independentes para Desktop e Mobile (sem bordas).
+            Gerencie os banners exibidos na página inicial com imagens independentes para Desktop e Mobile, sem recortes.
           </p>
         </div>
 
@@ -147,9 +147,7 @@ export const AdminBanners: React.FC = () => {
         <div className="space-y-0.5">
           <p className="font-semibold text-primary-pressed">Configuração de Proporção & Visual:</p>
           <p className="text-ink-muted text-[11px] leading-relaxed">
-            Os banners na loja pública <strong>não possuem bordas</strong> e se adaptam dinamicamente:
-            <span className="font-medium text-ink"> Desktop (21:7 / 16:6)</span> e 
-            <span className="font-medium text-ink"> Mobile (16:9 / 4:3)</span>.
+            Os banners na loja pública <strong>preservam a proporção original</strong> de cada arquivo, sem cortar o conteúdo.
             Você pode definir uma imagem sob medida para cada dispositivo ou subir arquivos locais diretamente.
           </p>
         </div>
@@ -182,13 +180,13 @@ export const AdminBanners: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-1 text-[10px] font-bold text-ink-muted uppercase mb-1">
                     <Monitor className="w-3 h-3" />
-                    <span>Desktop (21:7)</span>
+                    <span>Desktop (sem recorte)</span>
                   </div>
                   <div className="aspect-[21/7] rounded overflow-hidden bg-black/5" style={{ border: 'none' }}>
                     <img 
                       src={banner.desktopImageUrl} 
                       alt={banner.title} 
-                      className="w-full h-full object-cover border-0"
+                      className="w-full h-full object-contain border-0"
                     />
                   </div>
                 </div>
@@ -197,13 +195,13 @@ export const AdminBanners: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-1 text-[10px] font-bold text-ink-muted uppercase mb-1">
                       <Smartphone className="w-3 h-3" />
-                      <span>Mobile (16:9)</span>
+                      <span>Mobile (sem recorte)</span>
                     </div>
                     <div className="aspect-[16/9] w-36 rounded overflow-hidden bg-black/5" style={{ border: 'none' }}>
                       <img 
                         src={banner.mobileImageUrl} 
                         alt={banner.title} 
-                        className="w-full h-full object-cover border-0"
+                        className="w-full h-full object-contain border-0"
                       />
                     </div>
                   </div>
@@ -387,7 +385,7 @@ export const AdminBanners: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 font-bold text-ink">
                     <Monitor className="w-4 h-4 text-primary" />
-                    <span>Imagem Desktop (Proporção 21:7 / 16:6)</span>
+                    <span>Imagem Desktop (proporção original)</span>
                   </div>
                   <label className="h-6 px-2 rounded-xs bg-white border border-borderSoft text-ink text-[11px] font-medium flex items-center gap-1 cursor-pointer hover:bg-black/5">
                     <Upload className="w-3 h-3 text-ink-muted" />
@@ -409,7 +407,7 @@ export const AdminBanners: React.FC = () => {
                   className="w-full px-3 py-2 bg-white border border-borderSoft rounded-sm text-ink font-mono text-[11px]"
                 />
                 <p className="text-[10px] text-ink-muted">
-                  Recomendado: 1600x530px ou 1920x640px. Renderizado na tela do computador sem bordas.
+                  Use uma imagem larga e nítida. A proporção original será preservada, sem cortar o conteúdo.
                 </p>
               </div>
 
@@ -418,7 +416,7 @@ export const AdminBanners: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 font-bold text-ink">
                     <Smartphone className="w-4 h-4 text-emerald-600" />
-                    <span>Imagem Mobile (Proporção 16:9 / 4:3)</span>
+                    <span>Imagem Mobile (proporção original)</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
@@ -448,7 +446,7 @@ export const AdminBanners: React.FC = () => {
                   className="w-full px-3 py-2 bg-white border border-borderSoft rounded-sm text-ink font-mono text-[11px]"
                 />
                 <p className="text-[10px] text-ink-muted">
-                  Recomendado: 800x450px ou 750x500px. Proporção vertical/panorâmica adequada para celulares.
+                  Use uma composição adequada para celulares. A proporção original também será preservada.
                 </p>
               </div>
 
@@ -482,14 +480,14 @@ export const AdminBanners: React.FC = () => {
 
                 {/* Preview Box - Strictly NO borders on the image */}
                 <div className={`mx-auto bg-black/10 overflow-hidden rounded-md ${
-                  previewMode === 'desktop' ? 'w-full aspect-[21/7]' : 'max-w-xs aspect-[16/9]'
+                  previewMode === 'desktop' ? 'w-full' : 'max-w-xs w-full'
                 }`} style={{ border: 'none' }}>
                   {desktopImageUrl ? (
-                    <div className="relative w-full h-full">
+                    <div className="relative w-full">
                       <img 
                         src={previewMode === 'desktop' ? desktopImageUrl : (mobileImageUrl || desktopImageUrl)} 
                         alt="Preview" 
-                        className="w-full h-full object-cover block"
+                        className="w-full h-auto object-contain block"
                         style={{ border: 'none' }}
                       />
                       {(title || subtitle) && (
@@ -500,7 +498,7 @@ export const AdminBanners: React.FC = () => {
                       )}
                     </div>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-ink-muted text-xs">
+                    <div className="w-full min-h-32 flex items-center justify-center text-ink-muted text-xs">
                       Insira uma URL ou envie um arquivo para ver a prévia
                     </div>
                   )}
