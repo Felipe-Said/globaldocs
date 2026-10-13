@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { Header } from './components/Header';
@@ -7,10 +7,11 @@ import { ProductGrid } from './components/ProductGrid';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import { CartDrawer } from './components/CartDrawer';
 import { MyDownloadsView } from './components/MyDownloadsView';
-import { AdminLayout } from './components/Admin/AdminLayout';
 import { Footer } from './components/Footer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
+
+const AdminLayout = lazy(() => import('./components/Admin/AdminLayout').then(module => ({ default: module.AdminLayout })));
 
 const ToastNotification: React.FC = () => {
   const { toast } = useStore();
@@ -91,7 +92,9 @@ export default function App() {
 
           {/* Dedicated and Protected Admin Route */}
           <Route path="/admin" element={
-            <AdminLayout />
+            <Suspense fallback={<div className="min-h-screen bg-surface-warm" />}>
+              <AdminLayout />
+            </Suspense>
           } />
         </Routes>
 

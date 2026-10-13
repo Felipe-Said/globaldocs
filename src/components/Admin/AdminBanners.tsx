@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '@/context/StoreContext';
 import { Banner } from '@/types';
+import { supabase } from '@/lib/supabase';
 import { 
   Plus, 
   Trash2, 
@@ -39,6 +40,7 @@ export const AdminBanners: React.FC = () => {
   const [linkUrl, setLinkUrl] = useState('');
   const [active, setActive] = useState(true);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+  const [uploadingTarget, setUploadingTarget] = useState<'desktop' | 'mobile' | null>(null);
 
   const openCreateModal = () => {
     setEditingBanner(null);
@@ -64,7 +66,7 @@ export const AdminBanners: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, target: 'desktop' | 'mobile') => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'desktop' | 'mobile') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -73,21 +75,36 @@ export const AdminBanners: React.FC = () => {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
+    setUploadingTarget(target);
+    const extension = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const objectPath = `banners/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+
+    try {
+      const { error } = await supabase.storage.from('store-assets').upload(objectPath, file, {
+        cacheControl: '31536000',
+        contentType: file.type,
+        upsert: false,
+      });
+      if (error) throw error;
+
+      const { data } = supabase.storage.from('store-assets').getPublicUrl(objectPath);
+      const publicUrl = data.publicUrl;
       if (target === 'desktop') {
-        setDesktopImageUrl(result);
-        if (!mobileImageUrl) setMobileImageUrl(result);
+        setDesktopImageUrl(publicUrl);
+        if (!mobileImageUrl) setMobileImageUrl(publicUrl);
       } else {
-        setMobileImageUrl(result);
+        setMobileImageUrl(publicUrl);
       }
-      showToast(`Imagem ${target === 'desktop' ? 'Desktop' : 'Mobile'} carregada!`);
-    };
-    reader.readAsDataURL(file);
+      showToast(`Imagem ${target === 'desktop' ? 'Desktop' : 'Mobile'} enviada e otimizada!`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Não foi possível enviar a imagem.', 'error');
+    } finally {
+      setUploadingTarget(null);
+      e.target.value = '';
+    }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!desktopImageUrl) {
@@ -106,9 +123,9 @@ export const AdminBanners: React.FC = () => {
     };
 
     if (editingBanner) {
-      updateBanner(editingBanner.id, payload);
+      await updateBanner(editingBanner.id, payload);
     } else {
-      addBanner(payload);
+      await addBanner(payload);
     }
 
     setIsModalOpen(false);
@@ -389,10 +406,11 @@ export const AdminBanners: React.FC = () => {
                   </div>
                   <label className="h-6 px-2 rounded-xs bg-white border border-borderSoft text-ink text-[11px] font-medium flex items-center gap-1 cursor-pointer hover:bg-black/5">
                     <Upload className="w-3 h-3 text-ink-muted" />
-                    <span>Subir Arquivo</span>
+                    <span>{uploadingTarget === 'desktop' ? 'Enviando...' : 'Subir Arquivo'}</span>
                     <input
                       type="file"
                       accept="image/*"
+                      disabled={uploadingTarget !== null}
                       onChange={(e) => handleFileUpload(e, 'desktop')}
                       className="hidden"
                     />
@@ -428,10 +446,11 @@ export const AdminBanners: React.FC = () => {
                     </button>
                     <label className="h-6 px-2 rounded-xs bg-white border border-borderSoft text-ink text-[11px] font-medium flex items-center gap-1 cursor-pointer hover:bg-black/5">
                       <Upload className="w-3 h-3 text-ink-muted" />
-                      <span>Subir Arquivo</span>
+                      <span>{uploadingTarget === 'mobile' ? 'Enviando...' : 'Subir Arquivo'}</span>
                       <input
                         type="file"
                         accept="image/*"
+                        disabled={uploadingTarget !== null}
                         onChange={(e) => handleFileUpload(e, 'mobile')}
                         className="hidden"
                       />
@@ -541,7 +560,8 @@ export const AdminBanners: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="h-8 px-4 rounded-sm bg-primary hover:bg-primary-pressed text-white font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                  disabled={uploadingTarget !== null}
+                  className="h-8 px-4 rounded-sm bg-primary hover:bg-primary-pressed disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-3.5 h-3.5" />
                   <span>Salvar Banner</span>

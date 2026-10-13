@@ -109,7 +109,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setToast({ message, type }); window.setTimeout(() => setToast(null), 3500);
   };
 
-  const loadData = async (admin = false) => {
+  const loadStoreData = async () => {
     const [productResult, collectionResult, bannerResult, settingsResult] = await Promise.all([
       supabase.from('products').select('*').order('created_at', { ascending: false }),
       supabase.from('collections').select('*').order('created_at'),
@@ -119,39 +119,117 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (productResult.error || collectionResult.error || bannerResult.error || settingsResult.error) {
       showToast('Não foi possível carregar os dados da loja.', 'error'); return;
     }
-    let deliverables = new Map<string, Record<string, unknown>>();
-    if (admin) {
-      const { data } = await supabase.from('product_deliverables').select('product_id,data');
-      deliverables = new Map((data || []).map((row: any) => [row.product_id, row.data]));
-    }
-    setProducts((productResult.data || []).map((row: any) => productFromRow(row, deliverables.get(row.id))));
+    setProducts((productResult.data || []).map((row: any) => productFromRow(row)));
     setCollections((collectionResult.data || []).map(collectionFromRow));
     setBanners((bannerResult.data || []).map(bannerFromRow));
     if (settingsResult.data?.data) setSettings({ ...DEFAULT_SETTINGS, ...settingsResult.data.data });
-    if (admin) {
-      const [orderResult, couponResult] = await Promise.all([
-        supabase.from('orders').select('*').order('created_at', { ascending: false }),
-        supabase.from('coupons').select('*').order('created_at'),
-      ]);
-      if (!orderResult.error) setOrders((orderResult.data || []).map(orderFromRow));
-      if (!couponResult.error) setCoupons((couponResult.data || []).map(couponFromRow));
+  };
+
+  const migrateInlineBannerImages = async (rows: any[]) => {
+    const inlineImages = new Map<string, Promise<string>>();
+    let migratedCount = 0;
+
+    const uploadInlineImage = (dataUrl: string, bannerId: string, target: string) => {
+      const existing = inlineImages.get(dataUrl);
+      if (existing) return existing;
+
+      const upload = (async () => {
+        const response = await fetch(dataUrl);
+        const blob = await response.blob();
+        const subtype = blob.type.split('/')[1]?.split('+')[0] || 'jpg';
+        const extension = subtype === 'jpeg' ? 'jpg' : subtype;
+        const objectPath = `banners/${bannerId}-${target}-${crypto.randomUUID()}.${extension}`;
+        const { error } = await supabase.storage.from('store-assets').upload(objectPath, blob, {
+          cacheControl: '31536000',
+          contentType: blob.type,
+          upsert: false,
+        });
+        if (error) throw error;
+        return supabase.storage.from('store-assets').getPublicUrl(objectPath).data.publicUrl;
+      })();
+
+      inlineImages.set(dataUrl, upload);
+      return upload;
+    };
+
+    for (const row of rows) {
+      const originalData = row.data || {};
+      const desktopIsInline = typeof originalData.desktopImageUrl === 'string' && originalData.desktopImageUrl.startsWith('data:image/');
+      const mobileIsInline = typeof originalData.mobileImageUrl === 'string' && originalData.mobileImageUrl.startsWith('data:image/');
+      if (!desktopIsInline && !mobileIsInline) continue;
+
+      try {
+        const nextData = { ...originalData };
+        if (desktopIsInline) nextData.desktopImageUrl = await uploadInlineImage(originalData.desktopImageUrl, row.id, 'desktop');
+        if (mobileIsInline) nextData.mobileImageUrl = await uploadInlineImage(originalData.mobileImageUrl, row.id, 'mobile');
+
+        const { error } = await supabase.from('banners').update({ data: nextData }).eq('id', row.id);
+        if (error) throw error;
+
+        migratedCount += 1;
+        setBanners(value => value.map(item => item.id === row.id ? { ...item, ...nextData } : item));
+      } catch (error) {
+        console.error('Falha ao migrar imagem do banner para o Storage:', error);
+      }
     }
+
+    if (migratedCount > 0) showToast(`${migratedCount} banner(s) otimizado(s) no armazenamento.`);
+  };
+
+  const loadAdminData = async () => {
+    const [productResult, collectionResult, bannerResult, settingsResult, deliverableResult, orderResult, couponResult] = await Promise.all([
+      supabase.from('products').select('*').order('created_at', { ascending: false }),
+      supabase.from('collections').select('*').order('created_at'),
+      supabase.from('banners').select('*').order('sort_order'),
+      supabase.from('store_settings').select('data').eq('id', 1).maybeSingle(),
+      supabase.from('product_deliverables').select('product_id,data'),
+      supabase.from('orders').select('*').order('created_at', { ascending: false }),
+      supabase.from('coupons').select('*').order('created_at'),
+    ]);
+
+    const hasStoreError = productResult.error || collectionResult.error || bannerResult.error || settingsResult.error;
+    if (hasStoreError) showToast('Alguns dados do painel não puderam ser atualizados.', 'error');
+
+    const deliverables = new Map((deliverableResult.data || []).map((row: any) => [row.product_id, row.data]));
+    if (!productResult.error) setProducts((productResult.data || []).map((row: any) => productFromRow(row, deliverables.get(row.id))));
+    if (!collectionResult.error) setCollections((collectionResult.data || []).map(collectionFromRow));
+    if (!bannerResult.error) {
+      const bannerRows = bannerResult.data || [];
+      setBanners(bannerRows.map(bannerFromRow));
+      if (bannerRows.some((row: any) =>
+        String(row.data?.desktopImageUrl || '').startsWith('data:image/') ||
+        String(row.data?.mobileImageUrl || '').startsWith('data:image/')
+      )) {
+        void migrateInlineBannerImages(bannerRows);
+      }
+    }
+    if (!settingsResult.error && settingsResult.data?.data) setSettings({ ...DEFAULT_SETTINGS, ...settingsResult.data.data });
+    if (!orderResult.error) setOrders((orderResult.data || []).map(orderFromRow));
+    if (!couponResult.error) setCoupons((couponResult.data || []).map(couponFromRow));
   };
 
   const validateAdmin = async (userId?: string) => {
     if (!userId) { setIsAdminAuthenticated(false); return false; }
     const { data, error } = await supabase.from('admin_users').select('user_id').eq('user_id', userId).maybeSingle();
     const valid = !error && Boolean(data);
-    if (valid) await loadData(true);
     setIsAdminAuthenticated(valid);
+    if (valid) void loadAdminData();
+    else void loadStoreData();
     return valid;
   };
 
   useEffect(() => {
-    void loadData(false);
-    void supabase.auth.getSession().then(({ data }) => validateAdmin(data.session?.user.id));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      window.setTimeout(() => void validateAdmin(session?.user.id), 0);
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') {
+        window.setTimeout(() => {
+          if (session?.user.id) void validateAdmin(session.user.id);
+          else void loadStoreData();
+        }, 0);
+      } else if (event === 'SIGNED_OUT') {
+        setIsAdminAuthenticated(false);
+        setOrders([]);
+        setCoupons([]);
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, []);
@@ -167,7 +245,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
   const adminLogout = async () => {
     await supabase.auth.signOut(); setIsAdminAuthenticated(false); setOrders([]); setCoupons([]);
-    await loadData(false); showToast('Sessão administrativa encerrada.', 'info');
+    await loadStoreData(); showToast('Sessão administrativa encerrada.', 'info');
   };
 
   const customerLogin = async (email: string, token: string): Promise<Result> => {
@@ -185,14 +263,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const { data, error } = await supabase.from('products').insert({ data: publicData, active: product.active, featured: Boolean(product.isFeatured) }).select('*').single();
     if (error || !data) return showToast(error?.message || 'Erro ao cadastrar produto.', 'error');
     if (Object.keys(deliverable).length) await supabase.from('product_deliverables').upsert({ product_id: data.id, data: deliverable });
-    await loadData(true); showToast(`"${product.title}" cadastrado com sucesso!`);
+    setProducts(value => [productFromRow(data, deliverable), ...value]);
+    showToast(`"${product.title}" cadastrado com sucesso!`);
   };
   const updateProduct = async (id: string, updates: Partial<DigitalProduct>) => {
     const current = products.find(product => product.id === id); if (!current) return;
     const merged = { ...current, ...updates }; const { publicData, deliverable } = splitProduct(merged);
-    const { error } = await supabase.from('products').update({ data: publicData, active: merged.active, featured: Boolean(merged.isFeatured) }).eq('id', id);
-    if (!error) await supabase.from('product_deliverables').upsert({ product_id: id, data: deliverable });
-    if (error) return showToast(error.message, 'error'); await loadData(true); showToast('Item atualizado.');
+    const [{ error }, { error: deliverableError }] = await Promise.all([
+      supabase.from('products').update({ data: publicData, active: merged.active, featured: Boolean(merged.isFeatured) }).eq('id', id),
+      supabase.from('product_deliverables').upsert({ product_id: id, data: deliverable }),
+    ]);
+    if (error || deliverableError) return showToast(error?.message || deliverableError?.message || 'Erro ao atualizar item.', 'error');
+    setProducts(value => value.map(item => item.id === id ? merged : item));
+    showToast('Item atualizado.');
   };
   const deleteProduct = async (id: string) => {
     const { error } = await supabase.from('products').delete().eq('id', id);
@@ -201,14 +284,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toggleProductStatus = async (id: string) => { const item = products.find(value => value.id === id); if (item) await updateProduct(id, { active: !item.active }); };
 
   const addCollection = async (collection: Omit<Collection, 'id'>) => {
-    const { active, ...data } = collection; const { error } = await supabase.from('collections').insert({ data, active });
-    if (error) return showToast(error.message, 'error'); await loadData(true); showToast(`Coleção "${collection.name}" criada.`);
+    const { active, ...data } = collection; const { data: row, error } = await supabase.from('collections').insert({ data, active }).select('*').single();
+    if (error || !row) return showToast(error?.message || 'Erro ao criar coleção.', 'error');
+    setCollections(value => [...value, collectionFromRow(row)]);
+    showToast(`Coleção "${collection.name}" criada.`);
   };
   const updateCollection = async (id: string, updates: Partial<Collection>) => {
     const current = collections.find(value => value.id === id); if (!current) return;
     const merged = { ...current, ...updates }; const { id: _id, active, ...data } = merged;
     const { error } = await supabase.from('collections').update({ data, active }).eq('id', id);
-    if (error) return showToast(error.message, 'error'); await loadData(true); showToast('Coleção atualizada.');
+    if (error) return showToast(error.message, 'error');
+    setCollections(value => value.map(item => item.id === id ? merged : item));
+    showToast('Coleção atualizada.');
   };
   const deleteCollection = async (id: string) => {
     const { error } = await supabase.from('collections').delete().eq('id', id);
@@ -248,14 +335,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const addCoupon = async (coupon: Omit<Coupon, 'usageCount'>) => {
-    const { error } = await supabase.from('coupons').insert({ code: coupon.code.toUpperCase().trim(), discount_percent: coupon.discountPercent, active: coupon.active, expires_at: coupon.expiresAt || null });
-    if (error) return showToast(error.message, 'error'); await loadData(true); showToast('Cupom criado.');
+    const { data, error } = await supabase.from('coupons').insert({ code: coupon.code.toUpperCase().trim(), discount_percent: coupon.discountPercent, active: coupon.active, expires_at: coupon.expiresAt || null }).select('*').single();
+    if (error || !data) return showToast(error?.message || 'Erro ao criar cupom.', 'error');
+    setCoupons(value => [...value, couponFromRow(data)]);
+    showToast('Cupom criado.');
   };
-  const toggleCoupon = async (code: string) => { const item = coupons.find(value => value.code === code); if (!item) return; const { error } = await supabase.from('coupons').update({ active: !item.active }).eq('code', code); if (error) return showToast(error.message, 'error'); await loadData(true); };
+  const toggleCoupon = async (code: string) => { const item = coupons.find(value => value.code === code); if (!item) return; const { error } = await supabase.from('coupons').update({ active: !item.active }).eq('code', code); if (error) return showToast(error.message, 'error'); setCoupons(value => value.map(coupon => coupon.code === code ? { ...coupon, active: !coupon.active } : coupon)); };
   const deleteCoupon = async (code: string) => { const { error } = await supabase.from('coupons').delete().eq('code', code); if (error) return showToast(error.message, 'error'); setCoupons(value => value.filter(item => item.code !== code)); showToast('Cupom excluído.', 'info'); };
 
-  const addBanner = async (banner: Omit<Banner, 'id'>) => { const { active, order, ...data } = banner; const { error } = await supabase.from('banners').insert({ data, active, sort_order: order }); if (error) return showToast(error.message, 'error'); await loadData(true); showToast('Banner adicionado.'); };
-  const updateBanner = async (id: string, updates: Partial<Banner>) => { const current = banners.find(value => value.id === id); if (!current) return; const merged = { ...current, ...updates }; const { id: _id, active, order, ...data } = merged; const { error } = await supabase.from('banners').update({ data, active, sort_order: order }).eq('id', id); if (error) return showToast(error.message, 'error'); await loadData(true); showToast('Banner atualizado.'); };
+  const addBanner = async (banner: Omit<Banner, 'id'>) => { const { active, order, ...data } = banner; const { data: row, error } = await supabase.from('banners').insert({ data, active, sort_order: order }).select('*').single(); if (error || !row) return showToast(error?.message || 'Erro ao adicionar banner.', 'error'); setBanners(value => [...value, bannerFromRow(row)].sort((a, b) => a.order - b.order)); showToast('Banner adicionado.'); };
+  const updateBanner = async (id: string, updates: Partial<Banner>) => { const current = banners.find(value => value.id === id); if (!current) return; const merged = { ...current, ...updates }; const { id: _id, active, order, ...data } = merged; const { error } = await supabase.from('banners').update({ data, active, sort_order: order }).eq('id', id); if (error) return showToast(error.message, 'error'); setBanners(value => value.map(item => item.id === id ? merged : item).sort((a, b) => a.order - b.order)); showToast('Banner atualizado.'); };
   const deleteBanner = async (id: string) => { const { error } = await supabase.from('banners').delete().eq('id', id); if (error) return showToast(error.message, 'error'); setBanners(value => value.filter(item => item.id !== id)); showToast('Banner removido.', 'info'); };
   const toggleBannerStatus = async (id: string) => { const item = banners.find(value => value.id === id); if (item) await updateBanner(id, { active: !item.active }); };
   const updateSettings = async (updates: Partial<StoreSettings>) => { const next = { ...settings, ...updates }; const { error } = await supabase.from('store_settings').update({ data: next }).eq('id', 1); if (error) return showToast(error.message, 'error'); setSettings(next); showToast('Configurações salvas.'); };

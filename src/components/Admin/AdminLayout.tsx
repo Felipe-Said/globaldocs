@@ -1,13 +1,5 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { useStore } from '@/context/StoreContext';
-import { Dashboard } from '@/components/dashboard';
-import { AdminProducts } from './AdminProducts';
-import { AdminCollections } from './AdminCollections';
-import { AdminOrders } from './AdminOrders';
-import { AdminCoupons } from './AdminCoupons';
-import { AdminBanners } from './AdminBanners';
-import { AdminSettings } from './AdminSettings';
-import { AdminAPIs } from './AdminAPIs';
 import { AdminLogin } from './AdminLogin';
 import { 
   LayoutGrid, 
@@ -25,6 +17,15 @@ import {
   Key
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+const Dashboard = lazy(() => import('@/components/dashboard').then(module => ({ default: module.Dashboard })));
+const AdminProducts = lazy(() => import('./AdminProducts').then(module => ({ default: module.AdminProducts })));
+const AdminCollections = lazy(() => import('./AdminCollections').then(module => ({ default: module.AdminCollections })));
+const AdminOrders = lazy(() => import('./AdminOrders').then(module => ({ default: module.AdminOrders })));
+const AdminCoupons = lazy(() => import('./AdminCoupons').then(module => ({ default: module.AdminCoupons })));
+const AdminBanners = lazy(() => import('./AdminBanners').then(module => ({ default: module.AdminBanners })));
+const AdminSettings = lazy(() => import('./AdminSettings').then(module => ({ default: module.AdminSettings })));
+const AdminAPIs = lazy(() => import('./AdminAPIs').then(module => ({ default: module.AdminAPIs })));
 
 type AdminTab = 'overview' | 'products' | 'collections' | 'banners' | 'orders' | 'coupons' | 'apis' | 'settings';
 
@@ -178,39 +179,41 @@ export const AdminLayout: React.FC = () => {
 
         {/* Dynamic Content Body */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-          {activeTab === 'overview' && (
-            <div className="space-y-6">
-              <Dashboard />
-            </div>
-          )}
+          <Suspense fallback={<div className="text-xs text-muted-foreground">Carregando módulo...</div>}>
+            {activeTab === 'overview' && (
+              <div className="space-y-6">
+                <Dashboard />
+              </div>
+            )}
 
-          {activeTab === 'products' && (
-            <AdminProducts />
-          )}
+            {activeTab === 'products' && (
+              <AdminProducts />
+            )}
 
-          {activeTab === 'collections' && (
-            <AdminCollections />
-          )}
+            {activeTab === 'collections' && (
+              <AdminCollections />
+            )}
 
-          {activeTab === 'banners' && (
-            <AdminBanners />
-          )}
+            {activeTab === 'banners' && (
+              <AdminBanners />
+            )}
 
-          {activeTab === 'orders' && (
-            <AdminOrders />
-          )}
+            {activeTab === 'orders' && (
+              <AdminOrders />
+            )}
 
-          {activeTab === 'coupons' && (
-            <AdminCoupons />
-          )}
+            {activeTab === 'coupons' && (
+              <AdminCoupons />
+            )}
 
-          {activeTab === 'apis' && (
-            <AdminAPIs />
-          )}
+            {activeTab === 'apis' && (
+              <AdminAPIs />
+            )}
 
-          {activeTab === 'settings' && (
-            <AdminSettings />
-          )}
+            {activeTab === 'settings' && (
+              <AdminSettings />
+            )}
+          </Suspense>
         </main>
 
       </div>
