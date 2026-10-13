@@ -59,64 +59,64 @@ export const Hero: React.FC = () => {
             )}
           </div>
 
-          <div className="overflow-x-auto no-scrollbar scroll-smooth flex items-center gap-2 py-1">
-            <button
-              onClick={() => setSelectedCollectionId('all')}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 active:scale-95 ${
-                selectedCollectionId === 'all'
-                  ? 'bg-ink text-white shadow-xs'
-                  : 'bg-surface-warm text-ink-muted hover:text-ink border border-borderSoft'
-              }`}
-            >
-              Todas as Coleções
-            </button>
-            {collections.filter(c => c.active).map((col) => (
+          <div className="lg:flex lg:items-center lg:gap-4">
+            <div className="min-w-0 flex-1 overflow-x-auto no-scrollbar scroll-smooth flex items-center gap-2 py-1">
               <button
-                key={col.id}
-                onClick={() => setSelectedCollectionId(col.id)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all cursor-pointer shrink-0 active:scale-95 ${
-                  selectedCollectionId === col.id
-                    ? 'bg-ink text-white font-semibold shadow-xs'
+                onClick={() => setSelectedCollectionId('all')}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 active:scale-95 ${
+                  selectedCollectionId === 'all'
+                    ? 'bg-ink text-white shadow-xs'
                     : 'bg-surface-warm text-ink-muted hover:text-ink border border-borderSoft'
                 }`}
               >
-                {col.name}
+                Todas as Coleções
               </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Format and sort filters */}
-        <div className="mt-4 pt-4 border-t border-borderSoft">
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end sm:items-center text-xs">
-            <div className="flex items-center gap-1.5 bg-surface-warm border border-borderSoft rounded-sm px-2.5 py-1.5">
-              <span className="text-ink-muted text-[11px] shrink-0">Formato:</span>
-              <select
-                value={selectedFormat}
-                onChange={(e) => setSelectedFormat(e.target.value as any)}
-                className="w-full bg-transparent font-medium text-ink focus:outline-none text-xs"
-              >
-                {FORMATS.map(f => (
-                  <option key={f} value={f}>
-                    {f === 'all' ? 'Todos' : f}
-                  </option>
-                ))}
-              </select>
+              {collections.filter(c => c.active).map((col) => (
+                <button
+                  key={col.id}
+                  onClick={() => setSelectedCollectionId(col.id)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all cursor-pointer shrink-0 active:scale-95 ${
+                    selectedCollectionId === col.id
+                      ? 'bg-ink text-white font-semibold shadow-xs'
+                      : 'bg-surface-warm text-ink-muted hover:text-ink border border-borderSoft'
+                  }`}
+                >
+                  {col.name}
+                </button>
+              ))}
             </div>
 
-            <div className="flex items-center gap-1.5 bg-surface-warm border border-borderSoft rounded-sm px-2.5 py-1.5">
-              <span className="text-ink-muted text-[11px] shrink-0">Ordem:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="w-full bg-transparent font-medium text-ink focus:outline-none text-xs"
-              >
-                <option value="featured">Destaques</option>
-                <option value="popular">Mais Baixados</option>
-                <option value="price-asc">Menor Preço</option>
-                <option value="price-desc">Maior Preço</option>
-                <option value="newest">Mais Recentes</option>
-              </select>
+            {/* Format and sort filters */}
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs lg:mt-0 lg:flex lg:items-center lg:shrink-0">
+              <div className="flex items-center gap-1.5 bg-surface-warm border border-borderSoft rounded-sm px-2.5 py-1.5">
+                <span className="text-ink-muted text-[11px] shrink-0">Formato:</span>
+                <select
+                  value={selectedFormat}
+                  onChange={(e) => setSelectedFormat(e.target.value as any)}
+                  className="w-full bg-transparent font-medium text-ink focus:outline-none text-xs"
+                >
+                  {FORMATS.map(f => (
+                    <option key={f} value={f}>
+                      {f === 'all' ? 'Todos' : f}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-surface-warm border border-borderSoft rounded-sm px-2.5 py-1.5">
+                <span className="text-ink-muted text-[11px] shrink-0">Ordem:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="w-full bg-transparent font-medium text-ink focus:outline-none text-xs"
+                >
+                  <option value="featured">Destaques</option>
+                  <option value="popular">Mais Baixados</option>
+                  <option value="price-asc">Menor Preço</option>
+                  <option value="price-desc">Maior Preço</option>
+                  <option value="newest">Mais Recentes</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
