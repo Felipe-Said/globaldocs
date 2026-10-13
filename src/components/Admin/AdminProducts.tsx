@@ -44,6 +44,18 @@ const CATEGORIES: FileCategory[] = [
 
 const FORMATS: FileFormat[] = ['PDF', 'ZIP', 'XLSX', 'FIG', 'DOCX', 'PSD', 'PY', 'JSON', 'MP4', 'PACOTE'];
 
+const formatFileSize = (bytes: number) => {
+  if (!Number.isFinite(bytes) || bytes < 0) return '';
+  if (bytes === 0) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / (1024 ** unitIndex);
+  const maximumFractionDigits = unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
+
+  return `${value.toLocaleString('pt-BR', { maximumFractionDigits })} ${units[unitIndex]}`;
+};
+
 export const AdminProducts: React.FC = () => {
   const { 
     products, 
@@ -71,7 +83,7 @@ export const AdminProducts: React.FC = () => {
   const [price, setPrice] = useState('49.90');
   const [originalPrice, setOriginalPrice] = useState('99.00');
   const [format, setFormat] = useState<FileFormat>('DOCX');
-  const [fileSize, setFileSize] = useState('4.5 MB');
+  const [fileSize, setFileSize] = useState('');
   const [version, setVersion] = useState('v1.0 (2026)');
   const [description, setDescription] = useState('');
   const [tagsStr, setTagsStr] = useState('Contratos, Legal, Modelo');
@@ -104,7 +116,7 @@ export const AdminProducts: React.FC = () => {
     setPrice('49.90');
     setOriginalPrice('99.00');
     setFormat('ZIP');
-    setFileSize('12.5 MB');
+    setFileSize('');
     setVersion('v1.0 (2026)');
     setDescription('Arquivo completo com modelos e diretrizes prontas para utilização.');
     setTagsStr('Contratos, Legal, Negócios');
@@ -752,7 +764,7 @@ export const AdminProducts: React.FC = () => {
                             if (file) {
                               setZipFileName(file.name);
                               setFormat('ZIP');
-                              setFileSize(`${(file.size / (1024 * 1024)).toFixed(1)} MB`);
+                              setFileSize(formatFileSize(file.size));
                             }
                           }}
                         />
@@ -880,13 +892,23 @@ export const AdminProducts: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-medium text-ink mb-1">Tamanho / Peso</label>
+                  <label htmlFor="product-file-size" className="block font-medium text-ink mb-1">
+                    Tamanho do arquivo
+                    <span className="ml-1 text-[10px] font-semibold text-emerald-700">Automático</span>
+                  </label>
                   <input
+                    id="product-file-size"
                     type="text"
                     value={fileSize}
-                    onChange={(e) => setFileSize(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-surface-warm border border-borderSoft rounded-sm text-ink focus:bg-white"
+                    readOnly
+                    aria-readonly="true"
+                    aria-describedby="product-file-size-help"
+                    placeholder="Selecione um arquivo"
+                    className="w-full px-3 py-1.5 bg-black/[0.03] border border-borderSoft rounded-sm text-ink tabular-nums cursor-default"
                   />
+                  <p id="product-file-size-help" className="mt-1 text-[10px] leading-snug text-ink-muted">
+                    Calculado automaticamente ao selecionar o arquivo.
+                  </p>
                 </div>
 
                 <div>
