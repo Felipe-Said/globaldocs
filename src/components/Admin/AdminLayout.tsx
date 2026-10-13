@@ -116,9 +116,10 @@ export const AdminLayout: React.FC = () => {
                     <button
                       key={item.id}
                       onClick={() => setActiveTab(item.id)}
+                      aria-current={isActive ? 'page' : undefined}
                       className={`w-full h-9 px-3 rounded-md text-xs font-medium flex items-center justify-between transition-colors cursor-pointer text-left ${
                         isActive
-                          ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
+                          ? 'bg-primary text-white font-semibold shadow-xs'
                           : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
                       }`}
                     >
@@ -128,7 +129,7 @@ export const AdminLayout: React.FC = () => {
                       </div>
                       {item.badge !== undefined && (
                         <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                          isActive ? 'bg-primary-foreground text-primary' : 'bg-amber-100 text-amber-800'
+                          isActive ? 'bg-white text-primary' : 'bg-amber-100 text-amber-800'
                         }`}>
                           {item.badge}
                         </span>
@@ -161,9 +162,10 @@ export const AdminLayout: React.FC = () => {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
+                aria-current={isActive ? 'page' : undefined}
                 className={`h-8 px-2.5 rounded-md text-xs font-medium flex items-center gap-1.5 whitespace-nowrap transition-colors ${
                   isActive
-                    ? 'bg-primary text-primary-foreground font-semibold'
+                    ? 'bg-primary text-white font-semibold'
                     : 'bg-muted/40 text-muted-foreground'
                 }`}
               >
