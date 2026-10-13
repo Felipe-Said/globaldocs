@@ -5,12 +5,13 @@ import { Link } from 'react-router-dom';
 import { GATEWAY_LOGOS } from '../utils/gatewayLogos';
 
 export const Footer: React.FC = () => {
-  const { setSelectedCategory, settings } = useStore();
+  const { collections, setSelectedCategory, setSelectedCollectionId, settings } = useStore();
+  const activeCollections = collections.filter((collection) => collection.active);
 
   return (
     <footer className="bg-surface border-t border-borderSoft mt-20 pt-16 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-8 pb-12 border-b border-borderSoft">
+        <div className={`grid grid-cols-1 ${activeCollections.length > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-8 pb-12 border-b border-borderSoft`}>
           
           {/* Brand & Editorial Column */}
           <div className="md:col-span-2 space-y-4">
@@ -31,50 +32,29 @@ export const Footer: React.FC = () => {
             </div>
           </div>
 
-          {/* Links Column 1: Coleções & Categorias */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold text-ink uppercase tracking-wider">
-              Categorias
-            </h4>
-            <ul className="space-y-2 text-xs text-ink-muted">
-              <li>
-                <Link 
-                  to="/"
-                  onClick={() => setSelectedCategory('Documentos Legais')}
-                  className="hover:text-primary transition-colors cursor-pointer text-left block"
-                >
-                  Documentos Legais & LLC
-                </Link>
-              </li>
-              <li>
-                <Link 
-                  to="/"
-                  onClick={() => setSelectedCategory('Templates')}
-                  className="hover:text-primary transition-colors cursor-pointer text-left block"
-                >
-                  Templates Notion
-                </Link>
-              </li>
-              <li>
-                <Link 
-                  to="/"
-                  onClick={() => setSelectedCategory('Planilhas')}
-                  className="hover:text-primary transition-colors cursor-pointer text-left block"
-                >
-                  Planilhas Financeiras
-                </Link>
-              </li>
-              <li>
-                <Link 
-                  to="/"
-                  onClick={() => setSelectedCategory('Design & UI')}
-                  className="hover:text-primary transition-colors cursor-pointer text-left block"
-                >
-                  Design Systems (Figma)
-                </Link>
-              </li>
-            </ul>
-          </div>
+          {activeCollections.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-ink uppercase tracking-wider">
+                Coleções
+              </h4>
+              <ul className="space-y-2 text-xs text-ink-muted">
+                {activeCollections.map((collection) => (
+                  <li key={collection.id}>
+                    <Link
+                      to="/"
+                      onClick={() => {
+                        setSelectedCategory('all');
+                        setSelectedCollectionId(collection.id);
+                      }}
+                      className="hover:text-primary transition-colors cursor-pointer text-left block"
+                    >
+                      {collection.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Links Column 2: Cliente */}
           <div className="space-y-3">
