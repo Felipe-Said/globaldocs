@@ -12,6 +12,9 @@ dist/
 # Vercel local metadata
 .vercel/
 
+# Supabase local state
+supabase/.temp/
+
 # Logs and editor files
 *.log
 .DS_Store

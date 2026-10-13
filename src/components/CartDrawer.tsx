@@ -57,17 +57,17 @@ export const CartDrawer: React.FC = () => {
   const [phase, setPhase] = useState<CartPhase>('cart');
 
   // Dados do Comprador (Fase 2)
-  const [name, setName] = useState('Samuel Silva');
-  const [email, setEmail] = useState('samuel@exemplo.com');
-  const [document, setDocument] = useState('123.456.789-00');
-  const [shippingAddress, setShippingAddress] = useState('Av. Paulista, 1000, Bela Vista - São Paulo/SP, CEP 01310-100');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [document, setDocument] = useState('');
+  const [shippingAddress, setShippingAddress] = useState('');
 
   // Método de Pagamento (Fase 3)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
-  const [cardNumber, setCardNumber] = useState('4532 •••• •••• 8829');
-  const [cardExpiry, setCardExpiry] = useState('10/29');
-  const [cardCvv, setCardCvv] = useState('789');
-  const [cardName, setCardName] = useState('SAMUEL SILVA');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [cardName, setCardName] = useState('');
   const [installments, setInstallments] = useState('1');
 
   // Pedido Concluído (Fase 4)
@@ -85,7 +85,7 @@ export const CartDrawer: React.FC = () => {
 
   // Oferta Relâmpago (20 minutos)
   const [timeLeft, setTimeLeft] = useState<number>(20 * 60);
-  const [flashDiscountActive, setFlashDiscountActive] = useState<boolean>(true);
+  const [flashDiscountActive, setFlashDiscountActive] = useState<boolean>(false);
 
   // Quando isCheckoutOpen for ativado externamente, avançar direto para a fase de checkout
   useEffect(() => {
@@ -143,14 +143,14 @@ export const CartDrawer: React.FC = () => {
   };
 
   // Ativar 15% OFF da oferta relâmpago
-  const handleClaimFlashDiscount = () => {
-    applyCoupon('LLCPROMO');
+  const handleClaimFlashDiscount = async () => {
+    setCouponError('Nenhuma oferta automática está configurada.');
   };
 
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!couponInput.trim()) return;
-    const res = applyCoupon(couponInput);
+    const res = await applyCoupon(couponInput);
     if (!res.success) {
       setCouponError(res.message);
     } else {
@@ -182,32 +182,18 @@ export const CartDrawer: React.FC = () => {
   };
 
   // Finalização do Pagamento na Fase 3
-  const handleProcessFinalPayment = (e: React.FormEvent) => {
+  const handleProcessFinalPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (checkoutBtnState !== 'idle') return;
 
-    // 1. Estado Loading (Texto sobe, entra spinner)
     setCheckoutBtnState('loading');
-
-    // 2. Transição para Sucesso com morphing para verde esmeralda
-    setTimeout(() => {
-      setCheckoutBtnState('success');
-
-      // 3. Criação oficial do pedido e avanço para tela de Sucesso
-      setTimeout(() => {
-        const order = createOrder({
-          customerName: name,
-          customerEmail: email,
-          customerDocument: document,
-          paymentMethod: paymentMethod,
-        });
-
-        setCompletedOrder(order);
-        clearCart();
-        setPhase('success');
-        setCheckoutBtnState('idle');
-      }, 700);
-    }, 1200);
+    const order = await createOrder({ customerName: name, customerEmail: email, customerDocument: document, shippingAddress, paymentMethod });
+    if (!order) { setCheckoutBtnState('idle'); return; }
+    setCheckoutBtnState('success');
+    setCompletedOrder(order);
+    clearCart();
+    setPhase('success');
+    setCheckoutBtnState('idle');
   };
 
   // Chave Pix Copia e Cola
@@ -560,7 +546,7 @@ export const CartDrawer: React.FC = () => {
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Ex: Samuel Silva"
+                    placeholder="Nome completo"
                     className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-black focus:outline-none transition-colors"
                   />
                 </div>

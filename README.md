@@ -9,21 +9,15 @@ Plataforma completa de e-commerce e distribuição automatizada com painel admin
 Conforme solicitado, **o Painel Administrativo foi completamente desvinculado da loja pública**. Não existe nenhum botão público visível no cabeçalho dando acesso livre.
 
 - **Rota Privada:** [`/admin`](http://127.0.0.1:5173/admin)
-- **Tela de Autenticação / Login:** Ao acessar `/admin`, o sistema exige a senha de segurança de administrador.
-- **Senha Padrão Inicial:** `admin` (pode ser alterada diretamente na aba de Configurações do painel).
-- **Encerramento de Sessão:** Botão de **"Sair"** no topo do painel limpa a autenticação.
+- **Tela de autenticação:** o acesso usa Supabase Auth com e-mail e senha.
+- **Autorização:** políticas RLS verificam a tabela `admin_users`; conhecer a URL do painel não concede acesso aos dados.
+- **Encerramento de sessão:** o botão **"Sair"** revoga a sessão local do Supabase.
 
 ---
 
 ## 📁 Sistema de Coleções
 
-O Admin pode criar, editar e excluir coleções temáticas para agrupar e organizar os produtos à venda:
-- **Exemplos Inclusos:**
-  - *Formação & Abertura de LLC nos EUA* (slug: `/llc-usa`)
-  - *Contas & Estruturas Internacionais* (slug: `/contas-internacionais`)
-  - *Documentação Física & Apostilamento* (slug: `/documentos-fisicos`)
-  - *Templates & Ativos Digitais PRO* (slug: `/ativos-digitais`)
-- **Filtro em Estante Visual:** Na loja pública, os clientes podem filtrar instantaneamente por coleção com badges coloridos personalizados.
+O administrador pode criar, editar e excluir coleções reais para agrupar os produtos à venda. O banco inicia sem catálogo demonstrativo.
 
 ---
 
@@ -50,11 +44,12 @@ Requisitos: Node.js 22 e npm.
 
 ```bash
 npm ci
+copy .env.example .env.local
 npm run dev
 ```
 
 - **Loja Pública:** [http://127.0.0.1:5173](http://127.0.0.1:5173)
-- **Painel Administrativo Restrito:** [http://127.0.0.1:5173/admin](http://127.0.0.1:5173/admin) (Senha: `admin`)
+- **Painel Administrativo Restrito:** [http://127.0.0.1:5173/admin](http://127.0.0.1:5173/admin)
 
 Para validar a versão de produção:
 
@@ -69,8 +64,16 @@ O projeto já inclui `vercel.json` com a configuração do Vite, diretório de s
 
 1. Importe o repositório no painel da Vercel.
 2. Mantenha o preset **Vite** detectado automaticamente.
-3. Publique; não há variáveis de ambiente obrigatórias no estado atual do projeto.
+3. Configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` nos ambientes Production, Preview e Development.
+4. Publique.
 
 Também é possível publicar pela CLI da Vercel a partir da raiz do projeto.
 
-> **Importante:** atualmente produtos, pedidos, configurações e autenticação são persistidos em `localStorage`/`sessionStorage`. Portanto, esses dados ficam apenas no navegador de cada visitante e não são compartilhados entre dispositivos. Para operação real de e-commerce, será necessário conectar um backend/banco de dados e autenticação no servidor.
+## Banco e segurança
+
+- O schema versionado está em `supabase/migrations`.
+- Produtos, entregáveis, coleções, pedidos, cupons, banners, configurações e integrações ficam no Supabase.
+- Dados de entrega e integrações são privados e protegidos por RLS.
+- Pedidos públicos são criados pela função `create_order`, que recalcula preços no banco e sempre inicia com status `pending`.
+- A área do cliente exige e-mail, token seguro e pagamento confirmado.
+- Carrinho e estado visual existem apenas em memória; dados comerciais não são persistidos pelo navegador.

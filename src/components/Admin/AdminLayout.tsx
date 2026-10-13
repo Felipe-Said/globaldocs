@@ -146,7 +146,7 @@ export const AdminLayout: React.FC = () => {
               <span>Ambiente Protegido</span>
             </div>
             <p className="text-[11px] leading-relaxed">
-              Bloco <code className="font-mono text-[10px]">@efferd/dashboard-1</code> integrado com persistência local.
+              Dados protegidos por autenticação Supabase e políticas de acesso no banco.
             </p>
           </div>
         </aside>

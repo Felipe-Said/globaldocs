@@ -119,7 +119,6 @@ export interface StoreSettings {
   currency: string;
   allowGuestCheckout: boolean;
   notifyOnSale: boolean;
-  adminPassword: string;
 }
 
 export interface Banner {

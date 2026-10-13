@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 
 import { GATEWAY_LOGOS } from '../../utils/gatewayLogos';
+import { supabase } from '../../lib/supabase';
 
 // Logos oficiais vetorizadas sem bordas (otimizadas para modo claro)
 const API_LOGOS = {
@@ -96,29 +97,29 @@ const DEFAULT_API_SETTINGS: APISettings = {
   cloudflareSiteKey: '',
   cloudflareSecretKey: '',
 
-  mercadopagoPublicKey: 'APP_USR-mock-public-key-928374',
-  mercadopagoAccessToken: 'APP_USR-mock-access-token-82736482',
-  mercadopagoSandbox: true,
-  mercadopagoEnabled: true,
+  mercadopagoPublicKey: '',
+  mercadopagoAccessToken: '',
+  mercadopagoSandbox: false,
+  mercadopagoEnabled: false,
 
-  stripePublishableKey: 'pk_test_51MockStripePublishableKey',
-  stripeSecretKey: 'sk_test_51MockStripeSecretKey',
-  stripeWebhookSecret: 'whsec_MockStripeWebhookSecret',
-  stripeSandbox: true,
+  stripePublishableKey: '',
+  stripeSecretKey: '',
+  stripeWebhookSecret: '',
+  stripeSandbox: false,
   stripeEnabled: false,
 
-  efiClientId: 'Client_Id_Mock_EfGerencianet',
-  efiClientSecret: 'Client_Secret_Mock_EfGerencianet',
-  efiPixKey: 'pix@globaldocs.com.br',
-  efiEnabled: true,
+  efiClientId: '',
+  efiClientSecret: '',
+  efiPixKey: '',
+  efiEnabled: false,
 
   asaasApiKey: '',
-  asaasSandbox: true,
+  asaasSandbox: false,
   asaasEnabled: false,
 
-  cryptoUsdtWallet: 'TY2kL9m8XQ5zE1n2B4vC6w7P8o0R1s2T3u',
+  cryptoUsdtWallet: '',
   cryptoNetwork: 'TRC-20',
-  cryptoEnabled: true,
+  cryptoEnabled: false,
 };
 
 // Componente para renderizar a logo de marca sem borda
@@ -145,41 +146,27 @@ export const AdminAPIs: React.FC = () => {
   const { showToast } = useStore();
   const [subTab, setSubTab] = useState<'tools' | 'gateways'>('tools');
 
-  // Carregar configurações salvas no localStorage
-  const [config, setConfig] = useState<APISettings>(() => {
-    const saved = localStorage.getItem('globaldocs_api_settings');
-    if (saved) {
-      try {
-        return { ...DEFAULT_API_SETTINGS, ...JSON.parse(saved) };
-      } catch (e) {
-        return DEFAULT_API_SETTINGS;
-      }
-    }
-    return DEFAULT_API_SETTINGS;
-  });
+  const [config, setConfig] = useState<APISettings>(DEFAULT_API_SETTINGS);
 
   const [testingConnection, setTestingConnection] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    void supabase.from('integration_settings').select('data').eq('id', 1).maybeSingle().then(({ data, error }) => {
+      if (!error && data?.data) setConfig({ ...DEFAULT_API_SETTINGS, ...(data.data as Partial<APISettings>) });
+    });
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('globaldocs_api_settings', JSON.stringify(config));
-    showToast('Configurações de APIs salvas com sucesso!');
+    const { error } = await supabase.from('integration_settings').update({ data: config }).eq('id', 1);
+    showToast(error ? `Erro ao salvar integrações: ${error.message}` : 'Configurações de APIs salvas com segurança!', error ? 'error' : 'success');
   };
 
   const handleTestConnection = (apiId: string) => {
-    setTestingConnection(apiId);
-    setTestResult(null);
-
-    setTimeout(() => {
-      setTestingConnection(null);
-      setTestResult({
-        id: apiId,
-        success: true,
-        message: 'Conexão validada com sucesso! Endpoint respondendo 200 OK.'
-      });
-      showToast(`API ${apiId.toUpperCase()} testada e operando.`);
-    }, 1200);
+    setTestingConnection(null);
+    setTestResult({ id: apiId, success: false, message: 'Teste real requer uma função segura no servidor e ainda não está configurado.' });
+    showToast('A credencial pode ser salva, mas não será simulada como validada.', 'info');
   };
 
   return (

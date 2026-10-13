@@ -32,14 +32,14 @@ export const CheckoutModal: React.FC = () => {
 
   const navigate = useNavigate();
 
-  const [name, setName] = useState('Samuel Silva');
-  const [email, setEmail] = useState('samuel@exemplo.com');
-  const [document, setDocument] = useState('123.456.789-00');
-  const [shippingAddress, setShippingAddress] = useState('Av. Paulista, 1000, Apto 42, Bela Vista - São Paulo/SP, CEP 01310-100');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [document, setDocument] = useState('');
+  const [shippingAddress, setShippingAddress] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
-  const [cardNumber, setCardNumber] = useState('•••• •••• •••• 4242');
-  const [cardExpiry, setCardExpiry] = useState('12/28');
-  const [cardCvv, setCardCvv] = useState('888');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
@@ -51,20 +51,13 @@ export const CheckoutModal: React.FC = () => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
-  const handleCompletePayment = (e: React.FormEvent) => {
+  const handleCompletePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
 
-    setTimeout(() => {
-      const order = createOrder({
-        customerName: name,
-        customerEmail: email,
-        customerDocument: document,
-        paymentMethod: paymentMethod,
-      });
-      setIsProcessing(false);
-      setCompletedOrder(order);
-    }, 1200);
+    const order = await createOrder({ customerName: name, customerEmail: email, customerDocument: document, shippingAddress, paymentMethod });
+    setIsProcessing(false);
+    if (order) setCompletedOrder(order);
   };
 
   const pixKeyCopiaCola = `00020126580014br.gov.bcb.pix0136${settings.pixKey}520400005303986540${total.toFixed(2)}5802BR5913${settings.storeName}6009SAO PAULO62070503***6304E8A2`;

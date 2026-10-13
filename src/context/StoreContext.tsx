@@ -1,612 +1,279 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  DigitalProduct, 
-  CartItem, 
-  Order, 
-  Coupon, 
-  StoreSettings, 
-  FileCategory, 
-  FileFormat,
-  ProductType,
-  Collection,
-  PaymentMethod,
-  Banner 
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import {
+  Banner, CartItem, Collection, Coupon, DigitalProduct, FileCategory, FileFormat,
+  Order, PaymentMethod, ProductType, StoreSettings,
 } from '../types';
-import { 
-  INITIAL_PRODUCTS, 
-  INITIAL_ORDERS, 
-  INITIAL_COUPONS, 
-  INITIAL_SETTINGS,
-  INITIAL_COLLECTIONS,
-  INITIAL_BANNERS
-} from '../data/mockData';
 
-export interface CustomerUser {
-  email: string;
-  name?: string;
-  document?: string;
-}
+export interface CustomerUser { email: string; name?: string; document?: string }
+type Result = { success: boolean; message: string };
+type NewProduct = Omit<DigitalProduct, 'id' | 'createdAt' | 'updatedAt' | 'downloadsCount'>;
 
 interface StoreContextType {
-  // Navigation & Modals
-  selectedProduct: DigitalProduct | null;
-  setSelectedProduct: (product: DigitalProduct | null) => void;
-  isCartOpen: boolean;
-  setIsCartOpen: (open: boolean) => void;
-  isCheckoutOpen: boolean;
-  setIsCheckoutOpen: (open: boolean) => void;
-
-  // Customer Auth (Área do Cliente • Meus Downloads)
+  selectedProduct: DigitalProduct | null; setSelectedProduct: (value: DigitalProduct | null) => void;
+  isCartOpen: boolean; setIsCartOpen: (value: boolean) => void;
+  isCheckoutOpen: boolean; setIsCheckoutOpen: (value: boolean) => void;
   customerUser: CustomerUser | null;
-  customerLogin: (email: string, passwordOrOrderCode?: string) => { success: boolean; message: string };
-  customerLogout: () => void;
-
-  // Admin Security & Auth
+  customerLogin: (email: string, token: string) => Promise<Result>; customerLogout: () => void;
   isAdminAuthenticated: boolean;
-  adminLogin: (password: string) => boolean;
-  adminLogout: () => void;
-
-  // Products
+  adminLogin: (email: string, password: string) => Promise<Result>; adminLogout: () => Promise<void>;
   products: DigitalProduct[];
-  addProduct: (product: Omit<DigitalProduct, 'id' | 'createdAt' | 'updatedAt' | 'downloadsCount'>) => void;
-  updateProduct: (id: string, updates: Partial<DigitalProduct>) => void;
-  deleteProduct: (id: string) => void;
-  toggleProductStatus: (id: string) => void;
-
-  // Collections
+  addProduct: (value: NewProduct) => Promise<void>; updateProduct: (id: string, value: Partial<DigitalProduct>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>; toggleProductStatus: (id: string) => Promise<void>;
   collections: Collection[];
-  addCollection: (col: Omit<Collection, 'id'>) => void;
-  updateCollection: (id: string, updates: Partial<Collection>) => void;
-  deleteCollection: (id: string) => void;
-
-  // Filters & Search
-  searchQuery: string;
-  setSearchQuery: (q: string) => void;
-  selectedCategory: FileCategory | 'all';
-  setSelectedCategory: (cat: FileCategory | 'all') => void;
-  selectedProductType: ProductType | 'all';
-  setSelectedProductType: (type: ProductType | 'all') => void;
-  selectedCollectionId: string | 'all';
-  setSelectedCollectionId: (colId: string | 'all') => void;
-  selectedFormat: FileFormat | 'all';
-  setSelectedFormat: (fmt: FileFormat | 'all') => void;
+  addCollection: (value: Omit<Collection, 'id'>) => Promise<void>; updateCollection: (id: string, value: Partial<Collection>) => Promise<void>;
+  deleteCollection: (id: string) => Promise<void>;
+  searchQuery: string; setSearchQuery: (value: string) => void;
+  selectedCategory: FileCategory | 'all'; setSelectedCategory: (value: FileCategory | 'all') => void;
+  selectedProductType: ProductType | 'all'; setSelectedProductType: (value: ProductType | 'all') => void;
+  selectedCollectionId: string | 'all'; setSelectedCollectionId: (value: string | 'all') => void;
+  selectedFormat: FileFormat | 'all'; setSelectedFormat: (value: FileFormat | 'all') => void;
   sortBy: 'featured' | 'price-asc' | 'price-desc' | 'popular' | 'newest';
-  setSortBy: (sort: 'featured' | 'price-asc' | 'price-desc' | 'popular' | 'newest') => void;
-
-  // Cart
-  cart: CartItem[];
-  addToCart: (product: DigitalProduct) => void;
-  removeFromCart: (productId: string) => void;
-  updateCartQuantity: (productId: string, quantity: number) => void;
-  clearCart: () => void;
-  cartCount: number;
-  subtotal: number;
-  discount: number;
-  total: number;
-  appliedCoupon: Coupon | null;
-  applyCoupon: (code: string) => { success: boolean; message: string };
-  removeCoupon: () => void;
-
-  // Orders & Checkout
+  setSortBy: (value: 'featured' | 'price-asc' | 'price-desc' | 'popular' | 'newest') => void;
+  cart: CartItem[]; addToCart: (value: DigitalProduct) => void; removeFromCart: (id: string) => void;
+  updateCartQuantity: (id: string, quantity: number) => void; clearCart: () => void;
+  cartCount: number; subtotal: number; discount: number; total: number;
+  appliedCoupon: Coupon | null; applyCoupon: (code: string) => Promise<Result>; removeCoupon: () => void;
   orders: Order[];
-  createOrder: (orderData: {
-    customerName: string;
-    customerEmail: string;
-    customerDocument: string;
-    shippingAddress?: string;
-    paymentMethod: PaymentMethod;
-  }) => Order;
-  updateOrderStatus: (orderId: string, status: Order['status']) => void;
-
-  // Coupons
-  coupons: Coupon[];
-  addCoupon: (coupon: Omit<Coupon, 'usageCount'>) => void;
-  toggleCoupon: (code: string) => void;
-  deleteCoupon: (code: string) => void;
-
-  // Banners
-  banners: Banner[];
-  addBanner: (banner: Omit<Banner, 'id'>) => void;
-  updateBanner: (id: string, updates: Partial<Banner>) => void;
-  deleteBanner: (id: string) => void;
-  toggleBannerStatus: (id: string) => void;
-
-  // Store Settings
-  settings: StoreSettings;
-  updateSettings: (newSettings: Partial<StoreSettings>) => void;
-
-  // File Download Action
-  downloadFile: (productTitle: string, fileName: string, fileFormat: string, sampleContent?: string) => void;
-
-  // Feedback Notification Toast
+  createOrder: (value: { customerName: string; customerEmail: string; customerDocument: string; shippingAddress?: string; paymentMethod: PaymentMethod }) => Promise<Order | null>;
+  updateOrderStatus: (id: string, status: Order['status']) => Promise<void>;
+  coupons: Coupon[]; addCoupon: (value: Omit<Coupon, 'usageCount'>) => Promise<void>;
+  toggleCoupon: (code: string) => Promise<void>; deleteCoupon: (code: string) => Promise<void>;
+  banners: Banner[]; addBanner: (value: Omit<Banner, 'id'>) => Promise<void>;
+  updateBanner: (id: string, value: Partial<Banner>) => Promise<void>; deleteBanner: (id: string) => Promise<void>;
+  toggleBannerStatus: (id: string) => Promise<void>;
+  settings: StoreSettings; updateSettings: (value: Partial<StoreSettings>) => Promise<void>;
+  downloadFile: (title: string, name: string, format: string, sourceUrl?: string) => void;
   toast: { message: string; type: 'success' | 'info' | 'error' } | null;
   showToast: (message: string, type?: 'success' | 'info' | 'error') => void;
 }
 
+const DEFAULT_SETTINGS: StoreSettings = {
+  storeName: 'GlobalDOCS', storeTagline: '', contactEmail: 'saidlabsglobal@gmail.com',
+  supportWhatsapp: '', pixKey: '', currency: 'BRL (R$)', allowGuestCheckout: true, notifyOnSale: true,
+};
+const DELIVERABLE_FIELDS = ['downloadFileName', 'zipFileName', 'accessLogins', 'proxyDetails', 'accessInstructions'] as const;
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
+const productFromRow = (row: any, deliverable?: Record<string, unknown>): DigitalProduct => ({
+  ...row.data, ...(deliverable || {}), id: row.id, active: row.active, isFeatured: row.featured,
+  downloadsCount: Number(row.data?.downloadsCount || 0), createdAt: row.created_at, updatedAt: row.updated_at,
+});
+const collectionFromRow = (row: any): Collection => ({ ...row.data, id: row.id, active: row.active });
+const bannerFromRow = (row: any): Banner => ({ ...row.data, id: row.id, active: row.active, order: row.sort_order });
+const couponFromRow = (row: any): Coupon => ({
+  code: row.code, discountPercent: Number(row.discount_percent), active: row.active,
+  usageCount: row.usage_count, expiresAt: row.expires_at || undefined,
+});
+const orderFromRow = (row: any): Order => ({
+  id: row.id, customerName: row.customer_name, customerEmail: row.customer_email,
+  customerDocument: row.customer_document, shippingAddress: row.shipping_address || undefined,
+  items: row.items || [], total: Number(row.total), discount: Number(row.discount),
+  appliedCoupon: row.applied_coupon || undefined, paymentMethod: row.payment_method,
+  status: row.status, downloadToken: row.download_token, trackingCode: row.tracking_code || undefined,
+  createdAt: row.created_at,
+});
+const splitProduct = (product: Partial<DigitalProduct>) => {
+  const publicData: Record<string, unknown> = { ...product };
+  const deliverable: Record<string, unknown> = {};
+  for (const field of DELIVERABLE_FIELDS) {
+    if (field in publicData) { deliverable[field] = publicData[field]; delete publicData[field]; }
+  }
+  for (const field of ['id', 'active', 'isFeatured', 'createdAt', 'updatedAt']) delete publicData[field];
+  return { publicData, deliverable };
+};
+
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load from LocalStorage
-  const [products, setProducts] = useState<DigitalProduct[]>(() => {
-    const saved = localStorage.getItem('globaldocs_products_v2');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
-  });
-
-  const [collections, setCollections] = useState<Collection[]>(() => {
-    const saved = localStorage.getItem('globaldocs_collections_v2');
-    return saved ? JSON.parse(saved) : INITIAL_COLLECTIONS;
-  });
-
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem('globaldocs_orders_v2');
-    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
-  });
-
-  const [coupons, setCoupons] = useState<Coupon[]>(() => {
-    const saved = localStorage.getItem('globaldocs_coupons_v2');
-    return saved ? JSON.parse(saved) : INITIAL_COUPONS;
-  });
-
-  const [settings, setSettings] = useState<StoreSettings>(() => {
-    const saved = localStorage.getItem('globaldocs_settings_v2');
-    return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
-  });
-
-  const [banners, setBanners] = useState<Banner[]>(() => {
-    const saved = localStorage.getItem('globaldocs_banners_v2');
-    return saved ? JSON.parse(saved) : INITIAL_BANNERS;
-  });
-
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    const saved = localStorage.getItem('globaldocs_cart');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // Admin Auth State (sessionStorage so it persists on reload but stays isolated)
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('globaldocs_admin_auth') === 'true';
-  });
-
-  // Customer Auth State (Área do Cliente • Meus Downloads)
-  const [customerUser, setCustomerUser] = useState<CustomerUser | null>(() => {
-    const saved = localStorage.getItem('globaldocs_customer_auth');
-    return saved ? JSON.parse(saved) : null;
-  });
-
+  const [products, setProducts] = useState<DigitalProduct[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [settings, setSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [customerUser, setCustomerUser] = useState<CustomerUser | null>(null);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
-
-  // Modals & UI state
   const [selectedProduct, setSelectedProduct] = useState<DigitalProduct | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-
-  // Search & Filtering
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<FileCategory | 'all'>('all');
   const [selectedProductType, setSelectedProductType] = useState<ProductType | 'all'>('all');
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | 'all'>('all');
   const [selectedFormat, setSelectedFormat] = useState<FileFormat | 'all'>('all');
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'popular' | 'newest'>('featured');
-
-  // Toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
+    setToast({ message, type }); window.setTimeout(() => setToast(null), 3500);
   };
 
-  // Sync state to localStorage
-  useEffect(() => {
-    localStorage.setItem('globaldocs_products_v2', JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    localStorage.setItem('globaldocs_collections_v2', JSON.stringify(collections));
-  }, [collections]);
-
-  useEffect(() => {
-    localStorage.setItem('globaldocs_orders_v2', JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem('globaldocs_coupons_v2', JSON.stringify(coupons));
-  }, [coupons]);
-
-  useEffect(() => {
-    localStorage.setItem('globaldocs_settings_v2', JSON.stringify(settings));
-  }, [settings]);
-
-  useEffect(() => {
-    localStorage.setItem('globaldocs_banners_v2', JSON.stringify(banners));
-  }, [banners]);
-
-  useEffect(() => {
-    localStorage.setItem('globaldocs_cart', JSON.stringify(cart));
-  }, [cart]);
-
-  // Admin Auth Functions
-  const adminLogin = (password: string) => {
-    if (password === settings.adminPassword || password === 'admin') {
-      setIsAdminAuthenticated(true);
-      sessionStorage.setItem('globaldocs_admin_auth', 'true');
-      showToast('Acesso de Administrador autenticado com sucesso!');
-      return true;
-    } else {
-      showToast('Senha de administrador incorreta.', 'error');
-      return false;
+  const loadData = async (admin = false) => {
+    const [productResult, collectionResult, bannerResult, settingsResult] = await Promise.all([
+      supabase.from('products').select('*').order('created_at', { ascending: false }),
+      supabase.from('collections').select('*').order('created_at'),
+      supabase.from('banners').select('*').order('sort_order'),
+      supabase.from('store_settings').select('data').eq('id', 1).maybeSingle(),
+    ]);
+    if (productResult.error || collectionResult.error || bannerResult.error || settingsResult.error) {
+      showToast('Não foi possível carregar os dados da loja.', 'error'); return;
+    }
+    let deliverables = new Map<string, Record<string, unknown>>();
+    if (admin) {
+      const { data } = await supabase.from('product_deliverables').select('product_id,data');
+      deliverables = new Map((data || []).map((row: any) => [row.product_id, row.data]));
+    }
+    setProducts((productResult.data || []).map((row: any) => productFromRow(row, deliverables.get(row.id))));
+    setCollections((collectionResult.data || []).map(collectionFromRow));
+    setBanners((bannerResult.data || []).map(bannerFromRow));
+    if (settingsResult.data?.data) setSettings({ ...DEFAULT_SETTINGS, ...settingsResult.data.data });
+    if (admin) {
+      const [orderResult, couponResult] = await Promise.all([
+        supabase.from('orders').select('*').order('created_at', { ascending: false }),
+        supabase.from('coupons').select('*').order('created_at'),
+      ]);
+      if (!orderResult.error) setOrders((orderResult.data || []).map(orderFromRow));
+      if (!couponResult.error) setCoupons((couponResult.data || []).map(couponFromRow));
     }
   };
 
-  const adminLogout = () => {
-    setIsAdminAuthenticated(false);
-    sessionStorage.removeItem('globaldocs_admin_auth');
-    showToast('Sessão administrativa encerrada.', 'info');
+  const validateAdmin = async (userId?: string) => {
+    if (!userId) { setIsAdminAuthenticated(false); return false; }
+    const { data, error } = await supabase.from('admin_users').select('user_id').eq('user_id', userId).maybeSingle();
+    const valid = !error && Boolean(data);
+    if (valid) await loadData(true);
+    setIsAdminAuthenticated(valid);
+    return valid;
   };
 
-  // Customer Auth Functions (Área do Cliente • Meus Downloads)
-  const customerLogin = (email: string, passwordOrOrderCode?: string) => {
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail) {
-      return { success: false, message: 'Por favor, informe o e-mail cadastrado na compra.' };
-    }
-
-    // Busca pedidos vinculados ao e-mail
-    const matchedOrders = orders.filter(o => o.customerEmail.toLowerCase().trim() === cleanEmail);
-
-    if (matchedOrders.length === 0) {
-      // Se não encontrou por e-mail, verificar se informou um ID de pedido válido (Ex: ORD-8921)
-      if (passwordOrOrderCode && passwordOrOrderCode.trim()) {
-        const cleanCode = passwordOrOrderCode.trim().toUpperCase();
-        const orderByCode = orders.find(o => o.id.toUpperCase() === cleanCode);
-        if (orderByCode) {
-          const user: CustomerUser = {
-            email: orderByCode.customerEmail.toLowerCase().trim(),
-            name: orderByCode.customerName,
-            document: orderByCode.customerDocument,
-          };
-          setCustomerUser(user);
-          localStorage.setItem('globaldocs_customer_auth', JSON.stringify(user));
-          showToast(`Bem-vindo(a), ${user.name || user.email}! Seus downloads foram liberados.`);
-          return { success: true, message: 'Autenticado com sucesso pelo número do pedido!' };
-        }
-      }
-
-      return { 
-        success: false, 
-        message: 'Nenhum pedido encontrado para este e-mail. Utilize o mesmo e-mail cadastrado na compra.' 
-      };
-    }
-
-    // Usuário autenticado
-    const latestOrder = matchedOrders[0];
-    const user: CustomerUser = {
-      email: cleanEmail,
-      name: latestOrder.customerName,
-      document: latestOrder.customerDocument,
-    };
-    setCustomerUser(user);
-    localStorage.setItem('globaldocs_customer_auth', JSON.stringify(user));
-    showToast(`Bem-vindo(a), ${user.name || user.email}! Seus downloads foram liberados.`);
-    return { success: true, message: 'Login realizado com sucesso!' };
-  };
-
-  const customerLogout = () => {
-    setCustomerUser(null);
-    localStorage.removeItem('globaldocs_customer_auth');
-    showToast('Você encerrou a sessão da área de downloads.', 'info');
-  };
-
-  // Product Operations
-  const addProduct = (productData: Omit<DigitalProduct, 'id' | 'createdAt' | 'updatedAt' | 'downloadsCount'>) => {
-    const newProduct: DigitalProduct = {
-      ...productData,
-      id: `prod-${Date.now()}`,
-      downloadsCount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    setProducts(prev => [newProduct, ...prev]);
-    showToast(`"${newProduct.title}" cadastrado com sucesso!`);
-  };
-
-  const updateProduct = (id: string, updates: Partial<DigitalProduct>) => {
-    setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p));
-    showToast('Item atualizado com sucesso!');
-  };
-
-  const deleteProduct = (id: string) => {
-    setProducts(prev => prev.filter(p => p.id !== id));
-    showToast('Item removido com sucesso.', 'info');
-  };
-
-  const toggleProductStatus = (id: string) => {
-    setProducts(prev => prev.map(p => p.id === id ? { ...p, active: !p.active } : p));
-  };
-
-  // Collections Operations
-  const addCollection = (colData: Omit<Collection, 'id'>) => {
-    const newCol: Collection = {
-      ...colData,
-      id: `col-${Date.now()}`,
-    };
-    setCollections(prev => [...prev, newCol]);
-    showToast(`Coleção "${newCol.name}" criada com sucesso!`);
-  };
-
-  const updateCollection = (id: string, updates: Partial<Collection>) => {
-    setCollections(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
-    showToast('Coleção atualizada!');
-  };
-
-  const deleteCollection = (id: string) => {
-    setCollections(prev => prev.filter(c => c.id !== id));
-    // Detach products from deleted collection
-    setProducts(prev => prev.map(p => p.collectionId === id ? { ...p, collectionId: undefined } : p));
-    showToast('Coleção removida.', 'info');
-  };
-
-  // Cart Operations
-  const addToCart = (product: DigitalProduct) => {
-    setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
-      if (existing) {
-        showToast(`"${product.title}" já está no seu carrinho.`);
-        return prev;
-      }
-      showToast(`Adicionado ao carrinho: ${product.title}`);
-      return [...prev, { product, quantity: 1 }];
+  useEffect(() => {
+    void loadData(false);
+    void supabase.auth.getSession().then(({ data }) => validateAdmin(data.session?.user.id));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      window.setTimeout(() => void validateAdmin(session?.user.id), 0);
     });
-  };
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
-  const removeFromCart = (productId: string) => {
-    setCart(prev => prev.filter(item => item.product.id !== productId));
-  };
-
-  const updateCartQuantity = (productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(productId);
-      return;
+  const adminLogin = async (email: string, password: string): Promise<Result> => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error || !data.user || !(await validateAdmin(data.user.id))) {
+      if (data.user) await supabase.auth.signOut();
+      return { success: false, message: 'E-mail ou senha inválidos, ou usuário sem permissão administrativa.' };
     }
-    setCart(prev => prev.map(item => item.product.id === productId ? { ...item, quantity } : item));
+    showToast('Acesso administrativo autenticado.');
+    return { success: true, message: 'Autenticado com sucesso.' };
+  };
+  const adminLogout = async () => {
+    await supabase.auth.signOut(); setIsAdminAuthenticated(false); setOrders([]); setCoupons([]);
+    await loadData(false); showToast('Sessão administrativa encerrada.', 'info');
   };
 
-  const clearCart = () => {
-    setCart([]);
-    setAppliedCoupon(null);
+  const customerLogin = async (email: string, token: string): Promise<Result> => {
+    if (!email.trim() || !token.trim()) return { success: false, message: 'Informe o e-mail e o token do pedido.' };
+    const { data, error } = await supabase.rpc('get_customer_orders', { p_email: email.trim(), p_download_token: token.trim() });
+    if (error || !data?.length) return { success: false, message: 'Pedido pago não encontrado para esse e-mail e token.' };
+    const customerOrders = data.map(orderFromRow); setOrders(customerOrders);
+    setCustomerUser({ email: customerOrders[0].customerEmail, name: customerOrders[0].customerName, document: customerOrders[0].customerDocument });
+    return { success: true, message: 'Pedidos carregados com segurança.' };
+  };
+  const customerLogout = () => { setCustomerUser(null); setOrders([]); showToast('Sessão encerrada.', 'info'); };
+
+  const addProduct = async (product: NewProduct) => {
+    const { publicData, deliverable } = splitProduct({ ...product, downloadsCount: 0 });
+    const { data, error } = await supabase.from('products').insert({ data: publicData, active: product.active, featured: Boolean(product.isFeatured) }).select('*').single();
+    if (error || !data) return showToast(error?.message || 'Erro ao cadastrar produto.', 'error');
+    if (Object.keys(deliverable).length) await supabase.from('product_deliverables').upsert({ product_id: data.id, data: deliverable });
+    await loadData(true); showToast(`"${product.title}" cadastrado com sucesso!`);
+  };
+  const updateProduct = async (id: string, updates: Partial<DigitalProduct>) => {
+    const current = products.find(product => product.id === id); if (!current) return;
+    const merged = { ...current, ...updates }; const { publicData, deliverable } = splitProduct(merged);
+    const { error } = await supabase.from('products').update({ data: publicData, active: merged.active, featured: Boolean(merged.isFeatured) }).eq('id', id);
+    if (!error) await supabase.from('product_deliverables').upsert({ product_id: id, data: deliverable });
+    if (error) return showToast(error.message, 'error'); await loadData(true); showToast('Item atualizado.');
+  };
+  const deleteProduct = async (id: string) => {
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) return showToast(error.message, 'error'); setProducts(value => value.filter(item => item.id !== id)); showToast('Item removido.', 'info');
+  };
+  const toggleProductStatus = async (id: string) => { const item = products.find(value => value.id === id); if (item) await updateProduct(id, { active: !item.active }); };
+
+  const addCollection = async (collection: Omit<Collection, 'id'>) => {
+    const { active, ...data } = collection; const { error } = await supabase.from('collections').insert({ data, active });
+    if (error) return showToast(error.message, 'error'); await loadData(true); showToast(`Coleção "${collection.name}" criada.`);
+  };
+  const updateCollection = async (id: string, updates: Partial<Collection>) => {
+    const current = collections.find(value => value.id === id); if (!current) return;
+    const merged = { ...current, ...updates }; const { id: _id, active, ...data } = merged;
+    const { error } = await supabase.from('collections').update({ data, active }).eq('id', id);
+    if (error) return showToast(error.message, 'error'); await loadData(true); showToast('Coleção atualizada.');
+  };
+  const deleteCollection = async (id: string) => {
+    const { error } = await supabase.from('collections').delete().eq('id', id);
+    if (error) return showToast(error.message, 'error'); setCollections(value => value.filter(item => item.id !== id)); showToast('Coleção removida.', 'info');
   };
 
-  const cartCount = cart.length;
-  const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const discount = appliedCoupon ? (subtotal * (appliedCoupon.discountPercent / 100)) : 0;
+  const addToCart = (product: DigitalProduct) => setCart(value => value.some(item => item.product.id === product.id) ? value : [...value, { product, quantity: 1 }]);
+  const removeFromCart = (id: string) => setCart(value => value.filter(item => item.product.id !== id));
+  const updateCartQuantity = (id: string, quantity: number) => quantity <= 0 ? removeFromCart(id) : setCart(value => value.map(item => item.product.id === id ? { ...item, quantity } : item));
+  const clearCart = () => { setCart([]); setAppliedCoupon(null); };
+  const subtotal = useMemo(() => cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0), [cart]);
+  const discount = appliedCoupon ? subtotal * appliedCoupon.discountPercent / 100 : 0;
   const total = Math.max(0, subtotal - discount);
+  const applyCoupon = async (code: string): Promise<Result> => {
+    const { data, error } = await supabase.rpc('validate_coupon', { p_code: code.trim() });
+    if (error || !data) return { success: false, message: 'Cupom inválido, expirado ou inativo.' };
+    const coupon = data as Coupon; setAppliedCoupon(coupon); showToast(`Cupom ${coupon.code} aplicado.`);
+    return { success: true, message: `Desconto de ${coupon.discountPercent}% aplicado.` };
+  };
+  const removeCoupon = () => { setAppliedCoupon(null); showToast('Cupom removido.', 'info'); };
 
-  const applyCoupon = (code: string) => {
-    const trimmed = code.trim().toUpperCase();
-    const found = coupons.find(c => c.code.toUpperCase() === trimmed);
-    if (!found) {
-      return { success: false, message: 'Cupom inválido ou não encontrado.' };
-    }
-    if (!found.active) {
-      return { success: false, message: 'Este cupom não está mais ativo.' };
-    }
-    setAppliedCoupon(found);
-    showToast(`Cupom ${found.code} aplicado: ${found.discountPercent}% OFF!`);
-    return { success: true, message: `Desconto de ${found.discountPercent}% aplicado!` };
+  const createOrder: StoreContextType['createOrder'] = async value => {
+    const { data, error } = await supabase.rpc('create_order', {
+      p_customer_name: value.customerName, p_customer_email: value.customerEmail,
+      p_customer_document: value.customerDocument, p_shipping_address: value.shippingAddress || '',
+      p_payment_method: value.paymentMethod, p_cart: cart.map(item => ({ productId: item.product.id, quantity: item.quantity })),
+      p_coupon_code: appliedCoupon?.code || null,
+    });
+    if (error || !data) { showToast(error?.message || 'Não foi possível criar o pedido.', 'error'); return null; }
+    const order = orderFromRow(data); setOrders(previous => [order, ...previous]);
+    setCustomerUser({ email: order.customerEmail, name: order.customerName, document: order.customerDocument });
+    clearCart(); setIsCheckoutOpen(false); showToast('Pedido criado. Aguarde a confirmação do pagamento.'); return order;
+  };
+  const updateOrderStatus = async (id: string, status: Order['status']) => {
+    const { error } = await supabase.from('orders').update({ status }).eq('id', id);
+    if (error) return showToast(error.message, 'error'); setOrders(value => value.map(item => item.id === id ? { ...item, status } : item)); showToast(`Status do pedido ${id} atualizado.`);
   };
 
-  const removeCoupon = () => {
-    setAppliedCoupon(null);
-    showToast('Cupom removido.', 'info');
+  const addCoupon = async (coupon: Omit<Coupon, 'usageCount'>) => {
+    const { error } = await supabase.from('coupons').insert({ code: coupon.code.toUpperCase().trim(), discount_percent: coupon.discountPercent, active: coupon.active, expires_at: coupon.expiresAt || null });
+    if (error) return showToast(error.message, 'error'); await loadData(true); showToast('Cupom criado.');
   };
+  const toggleCoupon = async (code: string) => { const item = coupons.find(value => value.code === code); if (!item) return; const { error } = await supabase.from('coupons').update({ active: !item.active }).eq('code', code); if (error) return showToast(error.message, 'error'); await loadData(true); };
+  const deleteCoupon = async (code: string) => { const { error } = await supabase.from('coupons').delete().eq('code', code); if (error) return showToast(error.message, 'error'); setCoupons(value => value.filter(item => item.code !== code)); showToast('Cupom excluído.', 'info'); };
 
-  // Orders & Checkout
-  const createOrder = (orderData: {
-    customerName: string;
-    customerEmail: string;
-    customerDocument: string;
-    shippingAddress?: string;
-    paymentMethod: PaymentMethod;
-  }): Order => {
-    const orderItems = cart.map(item => ({
-      productId: item.product.id,
-      productTitle: item.product.title,
-      productType: item.product.productType,
-      format: item.product.format,
-      price: item.product.price,
-      downloadFileName: item.product.downloadFileName,
-      zipFileName: item.product.zipFileName,
-      accessLogins: item.product.accessLogins,
-      proxyDetails: item.product.proxyDetails,
-      accessInstructions: item.product.accessInstructions,
-    }));
+  const addBanner = async (banner: Omit<Banner, 'id'>) => { const { active, order, ...data } = banner; const { error } = await supabase.from('banners').insert({ data, active, sort_order: order }); if (error) return showToast(error.message, 'error'); await loadData(true); showToast('Banner adicionado.'); };
+  const updateBanner = async (id: string, updates: Partial<Banner>) => { const current = banners.find(value => value.id === id); if (!current) return; const merged = { ...current, ...updates }; const { id: _id, active, order, ...data } = merged; const { error } = await supabase.from('banners').update({ data, active, sort_order: order }).eq('id', id); if (error) return showToast(error.message, 'error'); await loadData(true); showToast('Banner atualizado.'); };
+  const deleteBanner = async (id: string) => { const { error } = await supabase.from('banners').delete().eq('id', id); if (error) return showToast(error.message, 'error'); setBanners(value => value.filter(item => item.id !== id)); showToast('Banner removido.', 'info'); };
+  const toggleBannerStatus = async (id: string) => { const item = banners.find(value => value.id === id); if (item) await updateBanner(id, { active: !item.active }); };
+  const updateSettings = async (updates: Partial<StoreSettings>) => { const next = { ...settings, ...updates }; const { error } = await supabase.from('store_settings').update({ data: next }).eq('id', 1); if (error) return showToast(error.message, 'error'); setSettings(next); showToast('Configurações salvas.'); };
+  const downloadFile = (_title: string, _name: string, _format: string, sourceUrl?: string) => { if (sourceUrl && /^https:\/\//i.test(sourceUrl)) { window.open(sourceUrl, '_blank', 'noopener,noreferrer'); return; } showToast('Nenhum arquivo real foi vinculado a este produto.', 'error'); };
 
-    const newOrder: Order = {
-      id: `ORD-${Math.floor(1000 + Math.random() * 9000)}`,
-      customerName: orderData.customerName,
-      customerEmail: orderData.customerEmail,
-      customerDocument: orderData.customerDocument,
-      shippingAddress: orderData.shippingAddress,
-      items: orderItems,
-      total: total,
-      discount: discount,
-      appliedCoupon: appliedCoupon?.code,
-      paymentMethod: orderData.paymentMethod,
-      status: orderData.paymentMethod === 'boleto' ? 'pending' : 'paid',
-      downloadToken: `tk_${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`,
-      createdAt: new Date().toISOString(),
-    };
-
-    setOrders(prev => [newOrder, ...prev]);
-
-    // Autenticar automaticamente o comprador na área do cliente
-    const buyer: CustomerUser = {
-      email: orderData.customerEmail.toLowerCase().trim(),
-      name: orderData.customerName.trim(),
-      document: orderData.customerDocument,
-    };
-    setCustomerUser(buyer);
-    localStorage.setItem('globaldocs_customer_auth', JSON.stringify(buyer));
-
-    // Update download count
-    setProducts(prev => prev.map(p => {
-      const purchased = orderItems.find(item => item.productId === p.id);
-      return purchased ? { ...p, downloadsCount: p.downloadsCount + 1 } : p;
-    }));
-
-    if (appliedCoupon) {
-      setCoupons(prev => prev.map(c => 
-        c.code === appliedCoupon.code ? { ...c, usageCount: c.usageCount + 1 } : c
-      ));
-    }
-
-    clearCart();
-    setIsCheckoutOpen(false);
-    return newOrder;
-  };
-
-  const updateOrderStatus = (orderId: string, status: Order['status']) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
-    showToast(`Status do pedido ${orderId} atualizado.`);
-  };
-
-  const addCoupon = (couponData: Omit<Coupon, 'usageCount'>) => {
-    const newCoupon: Coupon = {
-      ...couponData,
-      code: couponData.code.toUpperCase().trim(),
-      usageCount: 0,
-    };
-    setCoupons(prev => [...prev, newCoupon]);
-    showToast(`Cupom ${newCoupon.code} criado!`);
-  };
-
-  const toggleCoupon = (code: string) => {
-    setCoupons(prev => prev.map(c => c.code === code ? { ...c, active: !c.active } : c));
-  };
-
-  const deleteCoupon = (code: string) => {
-    setCoupons(prev => prev.filter(c => c.code !== code));
-    showToast('Cupom excluído.', 'info');
-  };
-
-  const addBanner = (bannerData: Omit<Banner, 'id'>) => {
-    const newBanner: Banner = {
-      ...bannerData,
-      id: `banner-${Date.now()}`,
-    };
-    setBanners(prev => [newBanner, ...prev]);
-    showToast('Banner adicionado com sucesso!');
-  };
-
-  const updateBanner = (id: string, updates: Partial<Banner>) => {
-    setBanners(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
-    showToast('Banner atualizado!');
-  };
-
-  const deleteBanner = (id: string) => {
-    setBanners(prev => prev.filter(b => b.id !== id));
-    showToast('Banner removido.', 'info');
-  };
-
-  const toggleBannerStatus = (id: string) => {
-    setBanners(prev => prev.map(b => b.id === id ? { ...b, active: !b.active } : b));
-  };
-
-  const updateSettings = (newSettings: Partial<StoreSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
-    showToast('Configurações salvas!');
-  };
-
-  const downloadFile = (productTitle: string, fileName: string, fileFormat: string, sampleContent?: string) => {
-    const content = sampleContent || `========================================\nGLOBAL DOCS - ENTREGA OFICIAL\n========================================\nPRODUTO: ${productTitle}\nARQUIVO: ${fileName}\nFORMATO: ${fileFormat}\nLICENÇA: Comercial & Operacional\nDATA: ${new Date().toLocaleDateString('pt-BR')}\n========================================`;
-    
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    showToast(`Download de "${fileName}" iniciado!`);
-  };
-
-  return (
-    <StoreContext.Provider value={{
-      selectedProduct,
-      setSelectedProduct,
-      isCartOpen,
-      setIsCartOpen,
-      isCheckoutOpen,
-      setIsCheckoutOpen,
-      customerUser,
-      customerLogin,
-      customerLogout,
-      isAdminAuthenticated,
-      adminLogin,
-      adminLogout,
-      products,
-      addProduct,
-      updateProduct,
-      deleteProduct,
-      toggleProductStatus,
-      collections,
-      addCollection,
-      updateCollection,
-      deleteCollection,
-      searchQuery,
-      setSearchQuery,
-      selectedCategory,
-      setSelectedCategory,
-      selectedProductType,
-      setSelectedProductType,
-      selectedCollectionId,
-      setSelectedCollectionId,
-      selectedFormat,
-      setSelectedFormat,
-      sortBy,
-      setSortBy,
-      cart,
-      addToCart,
-      removeFromCart,
-      updateCartQuantity,
-      clearCart,
-      cartCount,
-      subtotal,
-      discount,
-      total,
-      appliedCoupon,
-      applyCoupon,
-      removeCoupon,
-      orders,
-      createOrder,
-      updateOrderStatus,
-      coupons,
-      addCoupon,
-      toggleCoupon,
-      deleteCoupon,
-      banners,
-      addBanner,
-      updateBanner,
-      deleteBanner,
-      toggleBannerStatus,
-      settings,
-      updateSettings,
-      downloadFile,
-      toast,
-      showToast,
-    }}>
-      {children}
-    </StoreContext.Provider>
-  );
+  return <StoreContext.Provider value={{
+    selectedProduct, setSelectedProduct, isCartOpen, setIsCartOpen, isCheckoutOpen, setIsCheckoutOpen,
+    customerUser, customerLogin, customerLogout, isAdminAuthenticated, adminLogin, adminLogout,
+    products, addProduct, updateProduct, deleteProduct, toggleProductStatus,
+    collections, addCollection, updateCollection, deleteCollection,
+    searchQuery, setSearchQuery, selectedCategory, setSelectedCategory, selectedProductType, setSelectedProductType,
+    selectedCollectionId, setSelectedCollectionId, selectedFormat, setSelectedFormat, sortBy, setSortBy,
+    cart, addToCart, removeFromCart, updateCartQuantity, clearCart, cartCount: cart.length,
+    subtotal, discount, total, appliedCoupon, applyCoupon, removeCoupon,
+    orders, createOrder, updateOrderStatus, coupons, addCoupon, toggleCoupon, deleteCoupon,
+    banners, addBanner, updateBanner, deleteBanner, toggleBannerStatus,
+    settings, updateSettings, downloadFile, toast, showToast,
+  }}>{children}</StoreContext.Provider>;
 };
 
-export const useStore = () => {
-  const context = useContext(StoreContext);
-  if (!context) {
-    throw new Error('useStore must be used within a StoreProvider');
-  }
-  return context;
-};
+export const useStore = () => { const value = useContext(StoreContext); if (!value) throw new Error('useStore must be used within a StoreProvider'); return value; };

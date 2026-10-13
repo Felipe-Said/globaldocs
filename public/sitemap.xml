@@ -2,62 +2,14 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://globaldocs.com.br/</loc>
-    <lastmod>2026-03-12</lastmod>
+    <lastmod>2026-10-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://globaldocs.com.br/downloads</loc>
-    <lastmod>2026-03-12</lastmod>
+    <lastmod>2026-10-13</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://globaldocs.com.br/?colecao=formacao-llc-usa</loc>
-    <lastmod>2026-03-12</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.85</priority>
-  </url>
-  <url>
-    <loc>https://globaldocs.com.br/?colecao=contas-globais-fintechs</loc>
-    <lastmod>2026-03-12</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.85</priority>
-  </url>
-  <url>
-    <loc>https://globaldocs.com.br/?colecao=documentos-fisicos</loc>
-    <lastmod>2026-03-12</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.85</priority>
-  </url>
-  <url>
-    <loc>https://globaldocs.com.br/?colecao=ativos-digitais</loc>
-    <lastmod>2026-03-12</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.85</priority>
-  </url>
-  <url>
-    <loc>https://globaldocs.com.br/?item=prod-llc-1#kit-completo-formacao-llc-em-delaware-wyoming-usa</loc>
-    <lastmod>2026-03-12</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://globaldocs.com.br/?item=prod-contas-1#dossie-de-validacao-estrutura-de-contas-globais-mercury-stripe-us</loc>
-    <lastmod>2026-03-12</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://globaldocs.com.br/?item=prod-fisico-1#kit-fisico-oficial-livro-de-atas-certificado-societario-em-papel-moeda</loc>
-    <lastmod>2026-03-12</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://globaldocs.com.br/?item=prod-1#kit-completo-de-contratos-juridicos-para-startups-tech</loc>
-    <lastmod>2026-03-12</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
   </url>
 </urlset>

@@ -5,15 +5,18 @@ import { Link } from 'react-router-dom';
 
 export const AdminLogin: React.FC = () => {
   const { adminLogin } = useStore();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const success = adminLogin(password);
-    if (!success) {
-      setError(true);
-    }
+    setError('');
+    setIsLoading(true);
+    const result = await adminLogin(email, password);
+    setIsLoading(false);
+    if (!result.success) setError(result.message);
   };
 
   return (
@@ -37,33 +40,46 @@ export const AdminLogin: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-ink mb-1.5">
+              E-mail
+            </label>
+            <input
+              type="email"
+              required
+              autoFocus
+              autoComplete="username"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setError(''); }}
+              placeholder="seu@email.com"
+              className="w-full px-3.5 py-2 text-sm bg-surface-warm border border-borderSoft rounded-sm text-ink focus:bg-white focus:border-primary transition-all"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1.5">
               Senha de Administrador
             </label>
             <input
               type="password"
               required
-              autoFocus
+              autoComplete="current-password"
               value={password}
-              onChange={(e) => { setPassword(e.target.value); setError(false); }}
+              onChange={(e) => { setPassword(e.target.value); setError(''); }}
               placeholder="Digite a senha..."
               className="w-full px-3.5 py-2 text-sm bg-surface-warm border border-borderSoft rounded-sm text-ink focus:bg-white focus:border-primary transition-all"
             />
             {error && (
               <p className="text-xs text-accent-red mt-1.5">
-                Senha incorreta. Tente novamente.
+                {error}
               </p>
             )}
-            <p className="text-[11px] text-ink-faint mt-1.5">
-              * Senha padrão inicial do sistema: <code className="bg-surface-warm px-1 py-0.5 rounded font-mono font-bold text-ink">admin</code>
-            </p>
           </div>
 
           <button
             type="submit"
+            disabled={isLoading}
             className="w-full h-10 rounded-sm bg-primary hover:bg-primary-pressed text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>Entrar no Painel</span>
+            <span>{isLoading ? 'Autenticando...' : 'Entrar no Painel'}</span>
           </button>
         </form>
 

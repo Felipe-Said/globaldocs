@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { SlidersHorizontal, Save, ShieldCheck, Mail, Phone, QrCode, FileCode, Search, Copy } from 'lucide-react';
 import { generateSitemapXml, downloadSitemapXml } from '../../utils/seo';
@@ -14,6 +14,17 @@ export const AdminSettings: React.FC = () => {
   const [currency, setCurrency] = useState(settings.currency);
   const [allowGuestCheckout, setAllowGuestCheckout] = useState(settings.allowGuestCheckout);
   const [notifyOnSale, setNotifyOnSale] = useState(settings.notifyOnSale);
+
+  useEffect(() => {
+    setStoreName(settings.storeName);
+    setStoreTagline(settings.storeTagline);
+    setContactEmail(settings.contactEmail);
+    setSupportWhatsapp(settings.supportWhatsapp);
+    setPixKey(settings.pixKey);
+    setCurrency(settings.currency);
+    setAllowGuestCheckout(settings.allowGuestCheckout);
+    setNotifyOnSale(settings.notifyOnSale);
+  }, [settings]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
