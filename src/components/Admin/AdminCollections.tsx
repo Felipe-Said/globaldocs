@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
 import { Collection } from '../../types';
 import { 
@@ -10,7 +11,8 @@ import {
   X, 
   FolderPlus,
   Box,
-  FileText
+  FileText,
+  ExternalLink
 } from 'lucide-react';
 
 export const AdminCollections: React.FC = () => {
@@ -136,8 +138,17 @@ export const AdminCollections: React.FC = () => {
                 <p className="text-xs text-ink-muted line-clamp-3 leading-relaxed mb-3">
                   {col.description}
                 </p>
-                <div className="text-[11px] font-mono text-ink-faint">
-                  slug: /{col.slug}
+                <div className="text-[11px] font-mono text-ink-faint flex items-center justify-between">
+                  <span>slug: /{col.slug}</span>
+                  <Link
+                    to={`/colecao/${col.slug || col.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline font-sans flex items-center gap-1 font-semibold"
+                  >
+                    <span>Ver página</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </Link>
                 </div>
               </div>
 

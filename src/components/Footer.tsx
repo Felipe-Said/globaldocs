@@ -41,11 +41,7 @@ export const Footer: React.FC = () => {
                 {activeCollections.map((collection) => (
                   <li key={collection.id}>
                     <Link
-                      to="/"
-                      onClick={() => {
-                        setSelectedCategory('all');
-                        setSelectedCollectionId(collection.id);
-                      }}
+                      to={`/colecao/${collection.slug || collection.id}`}
                       className="hover:text-primary transition-colors cursor-pointer text-left block"
                     >
                       {collection.name}

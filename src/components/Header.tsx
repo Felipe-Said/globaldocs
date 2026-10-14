@@ -21,6 +21,7 @@ export const Header: React.FC = () => {
 
   const location = useLocation();
   const [showMobileSearch, setShowMobileSearch] = useState(false);
+  const isCatalogRoute = location.pathname === '/' || location.pathname.startsWith('/colecao') || location.pathname.startsWith('/collection');
 
   return (
     <header className="sticky top-0 z-40 bg-surface/95 backdrop-blur-md border-b border-borderSoft transition-all">
@@ -45,7 +46,7 @@ export const Header: React.FC = () => {
             <Link
               to="/"
               className={`h-[30px] px-3 rounded-xs text-sm font-medium transition-colors cursor-pointer flex items-center ${
-                location.pathname === '/'
+                isCatalogRoute
                   ? 'bg-primary-tint text-primary-pressed font-semibold'
                   : 'text-ink/90 hover:bg-black/[0.05]'
               }`}
@@ -70,7 +71,7 @@ export const Header: React.FC = () => {
         </div>
 
         {/* Center Search Input (Desktop) */}
-        {location.pathname === '/' && (
+        {isCatalogRoute && (
           <div className="hidden lg:flex items-center flex-1 max-w-xs mx-8">
             <div className="relative w-full">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -96,7 +97,7 @@ export const Header: React.FC = () => {
         {/* Mobile Top Actions (Search toggle + Cart) */}
         <div className="flex items-center space-x-2">
           {/* Mobile Search Toggle */}
-          {location.pathname === '/' && (
+          {isCatalogRoute && (
             <button
               onClick={() => setShowMobileSearch(!showMobileSearch)}
               className="lg:hidden w-8 h-8 flex items-center justify-center rounded-sm text-ink-muted hover:text-ink bg-surface-warm border border-borderSoft transition-colors cursor-pointer"
@@ -124,7 +125,7 @@ export const Header: React.FC = () => {
       </div>
 
       {/* Expandable Mobile Search Bar */}
-      {showMobileSearch && location.pathname === '/' && (
+      {showMobileSearch && isCatalogRoute && (
         <div className="lg:hidden px-3.5 py-2.5 bg-surface-warm/80 border-t border-borderSoft animate-fadeIn">
           <div className="relative w-full">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />

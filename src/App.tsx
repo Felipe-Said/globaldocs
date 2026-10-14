@@ -1,9 +1,10 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { ProductGrid } from './components/ProductGrid';
+import { CollectionView } from './components/CollectionView';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import { CartDrawer } from './components/CartDrawer';
 import { MyDownloadsView } from './components/MyDownloadsView';
@@ -44,7 +45,8 @@ const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
 // Component to handle deep-linking from Sitemap and search engines (?item=id or ?colecao=slug)
 const URLParamHandler: React.FC = () => {
-  const { products, setSelectedProduct, collections, setSelectedCollectionId } = useStore();
+  const { products, setSelectedProduct, collections } = useStore();
+  const navigate = useNavigate();
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -61,10 +63,10 @@ const URLParamHandler: React.FC = () => {
     if (colParam) {
       const foundCol = collections.find(c => c.slug === colParam || c.id === colParam);
       if (foundCol) {
-        setSelectedCollectionId(foundCol.id);
+        navigate(`/colecao/${foundCol.slug || foundCol.id}`, { replace: true });
       }
     }
-  }, [products, collections]);
+  }, [products, collections, navigate]);
 
   return null;
 };
@@ -80,6 +82,18 @@ export default function App() {
             <PublicLayout>
               <Hero />
               <ProductGrid />
+            </PublicLayout>
+          } />
+
+          {/* Dedicated Collection Routes */}
+          <Route path="/colecao/:slug" element={
+            <PublicLayout>
+              <CollectionView />
+            </PublicLayout>
+          } />
+          <Route path="/collection/:slug" element={
+            <PublicLayout>
+              <CollectionView />
             </PublicLayout>
           } />
 

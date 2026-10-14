@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { FileFormat } from '../types';
 import { BannerSlider } from './BannerSlider';
@@ -52,9 +53,9 @@ export const Hero: React.FC = () => {
             {selectedCollectionId !== 'all' && (
               <button
                 onClick={() => setSelectedCollectionId('all')}
-                className="text-[11px] text-primary hover:underline font-medium"
+                className="text-[11px] text-primary hover:underline font-medium cursor-pointer"
               >
-                Limpar seleção
+                Ver todas as coleções
               </button>
             )}
           </div>
@@ -63,7 +64,7 @@ export const Hero: React.FC = () => {
             <div className="min-w-0 flex-1 overflow-x-auto no-scrollbar scroll-smooth flex items-center gap-2 py-1">
               <button
                 onClick={() => setSelectedCollectionId('all')}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 active:scale-95 ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 active:scale-95 ${
                   selectedCollectionId === 'all'
                     ? 'bg-ink text-white shadow-xs'
                     : 'bg-surface-warm text-ink-muted hover:text-ink border border-borderSoft'

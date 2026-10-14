@@ -1,142 +1,271 @@
 import React from 'react';
 import { useStore } from '../context/StoreContext';
 import { ProductCard } from './ProductCard';
-import { FileText, FilterX } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { 
+  FileText, 
+  FilterX, 
+  ArrowRight, 
+  FolderTree, 
+  Layers
+} from 'lucide-react';
 
 export const ProductGrid: React.FC = () => {
   const { 
     products, 
     collections,
-    selectedCategory, 
-    selectedProductType,
     selectedCollectionId,
     selectedFormat, 
     searchQuery, 
     sortBy,
     setSearchQuery,
-    setSelectedCategory,
-    setSelectedProductType,
-    setSelectedCollectionId,
     setSelectedFormat
   } = useStore();
 
   const activeProducts = products.filter(p => p.active);
+  const activeCollections = collections.filter(c => c.active);
 
-  const filtered = activeProducts.filter(product => {
-    // Type filter
-    if (selectedProductType !== 'all' && product.productType !== selectedProductType) {
-      return false;
-    }
-
-    // Collection filter
-    if (selectedCollectionId !== 'all' && product.collectionId !== selectedCollectionId) {
-      return false;
-    }
-
-    // Category filter
-    if (selectedCategory !== 'all' && product.category !== selectedCategory) {
-      return false;
-    }
-
-    // Format filter
-    if (selectedFormat !== 'all' && product.format !== selectedFormat) {
-      return false;
-    }
-
-    // Search query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+  // =========================================================================
+  // CASO 1: BUSCA GLOBAL ATIVA
+  // Se o cliente digitou algo na busca do topo, exibe os resultados encontrados
+  // =========================================================================
+  if (searchQuery.trim()) {
+    const q = searchQuery.toLowerCase();
+    const searchResults = activeProducts.filter(product => {
+      if (selectedCollectionId !== 'all' && product.collectionId !== selectedCollectionId) return false;
+      if (selectedFormat !== 'all' && product.format !== selectedFormat) return false;
       const matchTitle = product.title.toLowerCase().includes(q);
       const matchDesc = product.description.toLowerCase().includes(q);
       const matchTag = product.tags.some(t => t.toLowerCase().includes(q));
       const matchJurisdiction = product.llcJurisdiction?.toLowerCase().includes(q);
       const matchAccount = product.accountDetails?.toLowerCase().includes(q);
-      if (!matchTitle && !matchDesc && !matchTag && !matchJurisdiction && !matchAccount) return false;
-    }
+      return matchTitle || matchDesc || matchTag || matchJurisdiction || matchAccount;
+    }).sort((a, b) => {
+      if (sortBy === 'price-asc') return a.price - b.price;
+      if (sortBy === 'price-desc') return b.price - a.price;
+      if (sortBy === 'popular') return b.downloadsCount - a.downloadsCount;
+      if (sortBy === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      return 0;
+    });
 
-    return true;
-  });
-
-  // Sort products
-  const sorted = [...filtered].sort((a, b) => {
-    if (sortBy === 'price-asc') return a.price - b.price;
-    if (sortBy === 'price-desc') return b.price - a.price;
-    if (sortBy === 'popular') return b.downloadsCount - a.downloadsCount;
-    if (sortBy === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    if (a.isFeatured && !b.isFeatured) return -1;
-    if (!a.isFeatured && b.isFeatured) return 1;
-    return 0;
-  });
-
-  const activeCollection = collections.find(c => c.id === selectedCollectionId);
-
-  return (
-    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
-      {/* Grid Meta Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 sm:pb-6 mb-6 border-b border-borderSoft gap-2 sm:gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
+    return (
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 sm:pb-6 mb-6 border-b border-borderSoft gap-2 sm:gap-4">
+          <div className="flex items-center gap-2">
             <h2 className="text-lg sm:text-xl font-bold text-ink tracking-tight">
-              {activeCollection ? `Coleção: ${activeCollection.name}` : 'Todos os Itens Disponíveis'}
+              Resultados para "{searchQuery}"
             </h2>
             <span className="whitespace-nowrap shrink-0 text-xs bg-surface-warm px-2.5 py-0.5 rounded-full font-medium text-ink-muted border border-borderSoft">
-              {sorted.length} {sorted.length === 1 ? 'resultado' : 'resultados'}
+              {searchResults.length} {searchResults.length === 1 ? 'resultado' : 'resultados'}
             </span>
           </div>
-          {activeCollection && (
-            <p className="text-xs text-ink-muted mt-1 max-w-xl">
-              {activeCollection.description}
-            </p>
-          )}
-        </div>
 
-        {(searchQuery || selectedCategory !== 'all' || selectedProductType !== 'all' || selectedCollectionId !== 'all' || selectedFormat !== 'all') && (
           <button
-            onClick={() => {
-              setSearchQuery('');
-              setSelectedCategory('all');
-              setSelectedProductType('all');
-              setSelectedCollectionId('all');
-              setSelectedFormat('all');
-            }}
+            onClick={() => setSearchQuery('')}
             className="text-xs text-primary hover:underline flex items-center gap-1 cursor-pointer font-medium self-start sm:self-auto"
           >
             <FilterX className="w-3.5 h-3.5" />
-            <span>Limpar Todos os Filtros</span>
+            <span>Limpar Busca</span>
           </button>
-        )}
-      </div>
+        </div>
 
-      {/* Grid Body */}
-      {sorted.length === 0 ? (
+        {searchResults.length === 0 ? (
+          <div className="bg-surface-warm/50 rounded-md border border-borderSoft p-12 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-white mx-auto flex items-center justify-center text-ink-muted border border-borderSoft">
+              <FileText className="w-6 h-6" />
+            </div>
+            <h3 className="font-semibold text-base text-ink">Nenhum item encontrado</h3>
+            <p className="text-xs text-ink-muted max-w-sm mx-auto">
+              Não encontramos arquivos ou serviços para "{searchQuery}".
+            </p>
+            <button
+              onClick={() => setSearchQuery('')}
+              className="h-8.5 px-4 rounded-sm bg-primary text-white text-xs font-semibold hover:bg-primary-pressed transition-colors cursor-pointer"
+            >
+              Voltar ao Catálogo Completo
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {searchResults.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  // =========================================================================
+  // CASO 2: EXIBIÇÃO DAS COLEÇÕES NA HOME
+  // Mostra até 5 produtos de cada coleção.
+  // SE E SOMENTE SE a coleção tiver mais que 5 produtos, exibe o botão
+  // "Ver mais" / "Ver tudo" que redireciona o cliente para a página da coleção.
+  // Se tiver 5 ou menos, exibe apenas os produtos, sem botão de redirecionamento.
+  // =========================================================================
+
+  // Filtra as coleções a serem exibidas (todas ou a selecionada na pílula do Hero)
+  const targetCollections = selectedCollectionId === 'all'
+    ? activeCollections
+    : activeCollections.filter(c => c.id === selectedCollectionId);
+
+  const collectionGroups = targetCollections.map(col => {
+    let colProducts = activeProducts.filter(p => p.collectionId === col.id);
+
+    // Filtro de formato (se selecionado no Hero)
+    if (selectedFormat !== 'all') {
+      colProducts = colProducts.filter(p => p.format === selectedFormat);
+    }
+
+    // Ordenação
+    colProducts.sort((a, b) => {
+      if (sortBy === 'price-asc') return a.price - b.price;
+      if (sortBy === 'price-desc') return b.price - a.price;
+      if (sortBy === 'popular') return b.downloadsCount - a.downloadsCount;
+      if (sortBy === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (a.isFeatured && !b.isFeatured) return -1;
+      if (!a.isFeatured && b.isFeatured) return 1;
+      return 0;
+    });
+
+    return {
+      collection: col,
+      totalCount: colProducts.length,
+      products: colProducts.slice(0, 5), // Mostra apenas 5 produtos de cada coleção na Home
+      hasMore: colProducts.length > 5,   // Verdadeiro APENAS se houver mais que 5
+    };
+  }).filter(group => group.totalCount > 0);
+
+  // Itens avulsos não vinculados a coleções (exibidos apenas quando em "Todas as Coleções")
+  const uncategorizedProducts = selectedCollectionId === 'all'
+    ? activeProducts.filter(p => 
+        !p.collectionId || !activeCollections.some(c => c.id === p.collectionId)
+      ).filter(p => selectedFormat === 'all' || p.format === selectedFormat)
+    : [];
+
+  const uncategorizedDisplayed = uncategorizedProducts.slice(0, 5);
+
+  const hasAnyProducts = collectionGroups.length > 0 || uncategorizedDisplayed.length > 0;
+
+  return (
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-12 sm:space-y-16">
+      
+      {/* Estado vazio quando nenhum produto é encontrado */}
+      {!hasAnyProducts && (
         <div className="bg-surface-warm/50 rounded-md border border-borderSoft p-12 text-center space-y-3">
           <div className="w-12 h-12 rounded-full bg-white mx-auto flex items-center justify-center text-ink-muted border border-borderSoft">
             <FileText className="w-6 h-6" />
           </div>
-          <h3 className="font-semibold text-base text-ink">Nenhum item encontrado</h3>
+          <h3 className="font-semibold text-base text-ink">Nenhum item disponível</h3>
           <p className="text-xs text-ink-muted max-w-sm mx-auto">
-            Não encontramos arquivos ou serviços correspondentes aos filtros ativos. Tente selecionar outro formato ou coleção.
+            Não encontramos produtos disponíveis para a seleção atual.
           </p>
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setSelectedCategory('all');
-              setSelectedProductType('all');
-              setSelectedCollectionId('all');
-              setSelectedFormat('all');
-            }}
-            className="h-8.5 px-4 rounded-sm bg-primary text-white text-xs font-semibold hover:bg-primary-pressed transition-colors cursor-pointer"
-          >
-            Ver Todos os Itens
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {sorted.map(product => (
-            <ProductCard key={product.id} product={product} />
-          ))}
+          {selectedFormat !== 'all' && (
+            <button
+              onClick={() => setSelectedFormat('all')}
+              className="h-8.5 px-4 rounded-sm bg-primary text-white text-xs font-semibold hover:bg-primary-pressed transition-colors cursor-pointer"
+            >
+              Exibir Todos os Formatos
+            </button>
+          )}
         </div>
       )}
+
+      {/* Renderiza cada Coleção na Home */}
+      {collectionGroups.map(({ collection, totalCount, products: items, hasMore }) => (
+        <div key={collection.id} className="animate-fadeIn">
+          
+          {/* Header da Coleção */}
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between pb-3.5 mb-5 border-b border-borderSoft gap-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  collection.badgeColor || 'bg-blue-50 text-blue-800 border-blue-200'
+                }`}>
+                  <FolderTree className="w-3 h-3 shrink-0" />
+                  <span>Coleção Oficial</span>
+                </span>
+                <span className="text-[11px] text-ink-muted">
+                  {totalCount} {totalCount === 1 ? 'item disponível' : 'itens disponíveis'}
+                </span>
+              </div>
+
+              <h2 className="text-xl sm:text-2xl font-bold text-ink tracking-tight">
+                {collection.name}
+              </h2>
+
+              {collection.description && (
+                <p className="text-xs sm:text-sm text-ink-muted max-w-2xl line-clamp-2">
+                  {collection.description}
+                </p>
+              )}
+            </div>
+
+            {/* BOTÃO "VER MAIS" / "VER TUDO": Aparece SOMENTE se tiver mais que 5 produtos */}
+            {hasMore && (
+              <div className="shrink-0 self-start sm:self-auto">
+                <Link
+                  to={`/colecao/${collection.slug || collection.id}`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-sm bg-primary hover:bg-primary-pressed text-white text-xs font-semibold shadow-xs transition-all cursor-pointer whitespace-nowrap active:scale-95"
+                >
+                  <span>Ver mais ({totalCount})</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            )}
+          </div>
+
+          {/* Grid mostrando até 5 produtos da coleção */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-5">
+            {items.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+
+          {/* Botão inferior adicional SOMENTE se tiver mais que 5 produtos */}
+          {hasMore && (
+            <div className="mt-5 text-center">
+              <Link
+                to={`/colecao/${collection.slug || collection.id}`}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-sm bg-surface-warm hover:bg-black/[0.05] border border-borderSoft text-xs font-semibold text-ink transition-colors cursor-pointer"
+              >
+                <span>Ver mais produtos desta coleção ({totalCount} no total)</span>
+                <ArrowRight className="w-3.5 h-3.5 text-primary" />
+              </Link>
+            </div>
+          )}
+
+        </div>
+      ))}
+
+      {/* Se houver produtos avulsos não vinculados a coleções */}
+      {uncategorizedDisplayed.length > 0 && (
+        <div className="animate-fadeIn pt-4 border-t border-borderSoft">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between pb-3.5 mb-5 border-b border-borderSoft gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-surface-warm text-ink-muted border border-borderSoft">
+                  <Layers className="w-3 h-3 shrink-0" />
+                  <span>Outros Arquivos & Dossiês</span>
+                </span>
+                <span className="text-[11px] text-ink-muted">
+                  {uncategorizedProducts.length} disponíveis
+                </span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-ink tracking-tight">
+                Mais Ativos Digitais
+              </h2>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-5">
+            {uncategorizedDisplayed.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </div>
+      )}
+
     </section>
   );
 };
