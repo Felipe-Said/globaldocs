@@ -20,6 +20,7 @@ import {
 import { buildProductSEO, updateDocumentSEO } from '../utils/seo';
 import { detectCountries } from '../utils/countryDetection';
 import { CountryBadgesList } from './CountryBadge';
+import { UsdtEstimate } from './UsdtEstimate';
 
 export const ProductDetailModal: React.FC = () => {
   const { selectedProduct, setSelectedProduct, addToCart, setIsCartOpen, cart, collections } = useStore();
@@ -297,6 +298,7 @@ export const ProductDetailModal: React.FC = () => {
                 </span>
               )}
             </div>
+            <UsdtEstimate amount={selectedProduct.price} compact />
           </div>
 
           <div className="flex items-center gap-2">

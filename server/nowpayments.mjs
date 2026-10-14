@@ -73,6 +73,51 @@ export const callNowPayments = async (settings, path, init = {}) => {
   return payload;
 };
 
+export const getNowPaymentsQuote = async (settings, amount, payCurrency = settings.pay_currency) => {
+  const normalizedAmount = Number(amount);
+  if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+    const error = new Error('O valor para cotação deve ser maior que zero.');
+    error.status = 400;
+    throw error;
+  }
+
+  const common = new URLSearchParams({
+    currency_from: 'brl',
+    currency_to: payCurrency,
+    is_fixed_rate: 'true',
+    is_fee_paid_by_user: 'false',
+  });
+  const estimateQuery = new URLSearchParams(common);
+  estimateQuery.set('amount', normalizedAmount.toFixed(2));
+  const minimumQuery = new URLSearchParams({
+    currency_from: payCurrency,
+    fiat_equivalent: 'brl',
+    is_fixed_rate: 'true',
+    is_fee_paid_by_user: 'false',
+  });
+
+  const [estimate, minimum] = await Promise.all([
+    callNowPayments(settings, `/estimate?${estimateQuery.toString()}`),
+    callNowPayments(settings, `/min-amount?${minimumQuery.toString()}`),
+  ]);
+
+  const estimatedAmount = Number(estimate.estimated_amount);
+  const minAmount = Number(minimum.min_amount || 0);
+  if (!Number.isFinite(estimatedAmount) || estimatedAmount <= 0) {
+    const error = new Error('A NOWPayments não retornou uma cotação válida para esta moeda.');
+    error.status = 502;
+    throw error;
+  }
+
+  return {
+    amount: normalizedAmount,
+    estimatedAmount,
+    payCurrency,
+    minAmount: Number.isFinite(minAmount) ? minAmount : 0,
+    meetsMinimum: !Number.isFinite(minAmount) || minAmount <= 0 || estimatedAmount >= minAmount,
+  };
+};
+
 export const publicPayment = payment => ({
   paymentId: String(payment.payment_id),
   status: payment.payment_status,

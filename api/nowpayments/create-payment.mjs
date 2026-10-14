@@ -1,5 +1,6 @@
 import {
   callNowPayments,
+  getNowPaymentsQuote,
   getNowPaymentsSettings,
   json,
   publicPayment,
@@ -37,6 +38,15 @@ export default async function handler(request, response) {
       .single();
     if (orderError || !order) return json(response, 404, { error: 'Pedido não encontrado.' });
     if (order.status === 'paid') return json(response, 409, { error: 'Este pedido já foi pago.' });
+
+    const quote = await getNowPaymentsQuote(settings, order.total);
+    if (!quote.meetsMinimum) {
+      return json(response, 422, {
+        error: `O valor mínimo atual da NOWPayments é ${quote.minAmount.toLocaleString('pt-BR', { maximumFractionDigits: 6 })} ${settings.pay_currency.toUpperCase()}.`,
+        minimumAmount: quote.minAmount,
+        estimatedAmount: quote.estimatedAmount,
+      });
+    }
 
     const { data: existing } = await supabaseAdmin
       .from('nowpayments_payments')

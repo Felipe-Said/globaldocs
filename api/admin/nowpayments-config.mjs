@@ -1,5 +1,5 @@
 import {
-  callNowPayments,
+  getNowPaymentsQuote,
   getNowPaymentsSettings,
   json,
   readBody,
@@ -29,11 +29,21 @@ export default async function handler(request, response) {
     const body = readBody(request);
 
     if (body.action === 'test') {
-      const testSettings = { ...current, api_key: String(body.apiKey || current.api_key).trim(), sandbox: Boolean(body.sandbox ?? current.sandbox) };
+      const allowedCurrencies = new Set(['usdttrc20', 'usdtbsc', 'usdterc20', 'usdtmatic']);
+      const requestedCurrency = String(body.payCurrency || current.pay_currency).toLowerCase();
+      if (!allowedCurrencies.has(requestedCurrency)) return json(response, 400, { error: 'Rede USDT inválida.' });
+      const testSettings = {
+        ...current,
+        api_key: String(body.apiKey || current.api_key).trim(),
+        sandbox: Boolean(body.sandbox ?? current.sandbox),
+        pay_currency: requestedCurrency,
+      };
       if (!testSettings.api_key) return json(response, 400, { error: 'Informe a API Key da NOWPayments.' });
-      const result = await callNowPayments(testSettings, '/currencies');
-      const currencies = Array.isArray(result.currencies) ? result.currencies.length : 0;
-      return json(response, 200, { success: true, message: `Conexão válida. ${currencies || 'Várias'} moedas disponíveis.` });
+      const quote = await getNowPaymentsQuote(testSettings, 100);
+      return json(response, 200, {
+        success: true,
+        message: `Conexão e cotação válidas: R$ 100,00 ≈ ${quote.estimatedAmount} ${requestedCurrency.toUpperCase()}.`,
+      });
     }
 
     const allowedCurrencies = new Set(['usdttrc20', 'usdtbsc', 'usdterc20', 'usdtmatic']);

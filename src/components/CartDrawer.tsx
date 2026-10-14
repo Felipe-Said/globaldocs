@@ -3,6 +3,7 @@ import { useStore } from '../context/StoreContext';
 import { detectBrands } from '../utils/brandDetection';
 import { detectCountries } from '../utils/countryDetection';
 import { CountryBadgesList } from './CountryBadge';
+import { UsdtEstimate } from './UsdtEstimate';
 import { GATEWAY_LOGOS } from '../utils/gatewayLogos';
 import { Order, PaymentMethod } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -43,6 +44,12 @@ interface CryptoPayment {
   orderPaid?: boolean;
 }
 
+interface PaymentAvailability {
+  pix: { enabled: boolean };
+  card: { enabled: boolean };
+  crypto: { enabled: boolean; payCurrency: string; sandbox: boolean };
+}
+
 export const CartDrawer: React.FC = () => {
   const { 
     isCartOpen, 
@@ -76,7 +83,13 @@ export const CartDrawer: React.FC = () => {
   const [shippingAddress, setShippingAddress] = useState('');
 
   // Método de Pagamento (Fase 3)
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [paymentAvailability, setPaymentAvailability] = useState<PaymentAvailability>({
+    pix: { enabled: false },
+    card: { enabled: false },
+    crypto: { enabled: false, payCurrency: 'usdttrc20', sandbox: false },
+  });
+  const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(true);
   const [cryptoGateway, setCryptoGateway] = useState({ enabled: false, payCurrency: 'usdttrc20', sandbox: false });
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
@@ -116,14 +129,25 @@ export const CartDrawer: React.FC = () => {
 
   useEffect(() => {
     if (!isCartOpen) return;
-    void fetch('/api/nowpayments/config', { cache: 'no-store' })
+    setPaymentMethodsLoading(true);
+    void fetch('/api/payment-methods', { cache: 'no-store' })
       .then(response => response.ok ? response.json() : null)
       .then(data => {
         if (!data) return;
-        setCryptoGateway(data);
-        if (!data.enabled) setPaymentMethod(method => method === 'crypto' ? 'pix' : method);
+        setPaymentAvailability(data);
+        setCryptoGateway(data.crypto);
+        const available: PaymentMethod[] = [
+          ...(data.pix.enabled ? ['pix' as PaymentMethod] : []),
+          ...(data.card.enabled ? ['credit_card' as PaymentMethod] : []),
+          ...(data.crypto.enabled ? ['crypto' as PaymentMethod] : []),
+        ];
+        setPaymentMethod(method => method && available.includes(method) ? method : available[0] || null);
       })
-      .catch(() => setCryptoGateway(value => ({ ...value, enabled: false })));
+      .catch(() => {
+        setPaymentMethod(null);
+        setCryptoGateway(value => ({ ...value, enabled: false }));
+      })
+      .finally(() => setPaymentMethodsLoading(false));
   }, [isCartOpen]);
 
   // Se o carrinho ficar vazio e ainda estiver nas fases de compra, voltar para 'cart'
@@ -246,6 +270,10 @@ export const CartDrawer: React.FC = () => {
   const handleProcessFinalPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (checkoutBtnState !== 'idle') return;
+    if (!paymentMethod) {
+      showToast('Nenhum método de pagamento está ativo no momento.', 'error');
+      return;
+    }
 
     setCheckoutBtnState('loading');
     const reusableCryptoOrder = paymentMethod === 'crypto' && completedOrder?.paymentMethod === 'crypto' && completedOrder.status === 'pending'
@@ -298,6 +326,15 @@ export const CartDrawer: React.FC = () => {
     setCopiedToken(true);
     setTimeout(() => setCopiedToken(false), 2500);
   };
+
+  const availablePaymentCount = Number(paymentAvailability.pix.enabled)
+    + Number(paymentAvailability.card.enabled)
+    + Number(paymentAvailability.crypto.enabled);
+  const paymentGridColumns = availablePaymentCount <= 1
+    ? 'grid-cols-1'
+    : availablePaymentCount === 2
+      ? 'grid-cols-2'
+      : 'grid-cols-3';
 
   return (
     <div 
@@ -707,15 +744,17 @@ export const CartDrawer: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <span className="font-bold text-gray-900 text-sm">{formatPrice(total)}</span>
+                  {cryptoGateway.enabled && <UsdtEstimate amount={total} compact />}
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 space-y-4">
                 
                 {/* Seletor de Métodos com Logos Oficiais Sem Bordas */}
-                <div className="grid grid-cols-3 gap-2">
-                  <button
+                <div className={`grid ${paymentGridColumns} gap-2`}>
+                  {paymentAvailability.pix.enabled && <button
                     type="button"
+                    aria-pressed={paymentMethod === 'pix'}
                     onClick={() => setPaymentMethod('pix')}
                     className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
                       paymentMethod === 'pix'
@@ -731,10 +770,11 @@ export const CartDrawer: React.FC = () => {
                     />
                     <span className="text-xs">Pix</span>
                     <span className="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-full font-bold">5 seg</span>
-                  </button>
+                  </button>}
 
-                  <button
+                  {paymentAvailability.card.enabled && <button
                     type="button"
+                    aria-pressed={paymentMethod === 'credit_card'}
                     onClick={() => setPaymentMethod('credit_card')}
                     className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
                       paymentMethod === 'credit_card'
@@ -758,10 +798,11 @@ export const CartDrawer: React.FC = () => {
                     </div>
                     <span className="text-xs">Cartão</span>
                     <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.2 rounded-full font-medium">12x</span>
-                  </button>
+                  </button>}
 
-                  <button
+                  {paymentAvailability.crypto.enabled && <button
                     type="button"
+                    aria-pressed={paymentMethod === 'crypto'}
                     disabled={!cryptoGateway.enabled}
                     onClick={() => cryptoGateway.enabled && setPaymentMethod('crypto')}
                     className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
@@ -782,8 +823,20 @@ export const CartDrawer: React.FC = () => {
                     <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-medium ${cryptoGateway.enabled ? 'text-amber-700 bg-amber-100' : 'text-gray-500 bg-gray-200'}`}>
                       {cryptoGateway.enabled ? cryptoGateway.payCurrency.toUpperCase() : 'Indisponível'}
                     </span>
-                  </button>
+                  </button>}
                 </div>
+
+                {paymentMethodsLoading && (
+                  <div role="status" className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-center text-xs text-gray-600">
+                    Verificando métodos de pagamento disponíveis...
+                  </div>
+                )}
+
+                {!paymentMethodsLoading && availablePaymentCount === 0 && (
+                  <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center text-xs leading-relaxed text-amber-900">
+                    Nenhum método de pagamento está ativo no momento. Entre em contato com o suporte ou tente novamente mais tarde.
+                  </div>
+                )}
 
                 {/* Conteúdo: PIX */}
                 {paymentMethod === 'pix' && (
@@ -922,9 +975,12 @@ export const CartDrawer: React.FC = () => {
                     </div>
 
                     {!cryptoPayment ? (
-                      <p className="text-[11px] text-amber-800 leading-relaxed">
-                        Ao confirmar, a NOWPayments calcula a cotação atual e gera um endereço exclusivo para este pedido. A liberação ocorre somente após a confirmação on-chain.
-                      </p>
+                      <div className="space-y-3">
+                        <UsdtEstimate amount={total} />
+                        <p className="text-[11px] text-amber-800 leading-relaxed">
+                          Ao confirmar, a NOWPayments fixa a cotação atual e gera um endereço exclusivo para este pedido. A liberação ocorre somente após a confirmação on-chain.
+                        </p>
+                      </div>
                     ) : (
                       <div className="space-y-2.5">
                         <div className="flex items-center justify-between gap-3">
@@ -972,8 +1028,8 @@ export const CartDrawer: React.FC = () => {
                 <button 
                   id="checkout-btn" 
                   type="submit"
-                  disabled={checkoutBtnState !== 'idle'}
-                  className={`relative w-full rounded-xl h-[56px] overflow-hidden group shadow-md transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] font-medium active:scale-[0.96] cursor-pointer ${
+                  disabled={checkoutBtnState !== 'idle' || paymentMethodsLoading || !paymentMethod}
+                  className={`relative w-full rounded-xl h-[56px] overflow-hidden group shadow-md transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] font-medium active:scale-[0.96] cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                     checkoutBtnState === 'success' 
                       ? 'bg-emerald-500 text-white' 
                       : 'bg-black text-white hover:bg-neutral-900'
@@ -987,7 +1043,11 @@ export const CartDrawer: React.FC = () => {
                         : 'opacity-0 -translate-y-5 pointer-events-none'
                     }`}
                   >
-                    <span>{paymentMethod === 'crypto' ? `Gerar cobrança em USDT (${formatPrice(total)})` : `Confirmar e Finalizar Compra (${formatPrice(total)})`}</span>
+                    <span>{paymentMethod === 'crypto'
+                      ? `Gerar cobrança em USDT (${formatPrice(total)})`
+                      : paymentMethod
+                        ? `Confirmar e Finalizar Compra (${formatPrice(total)})`
+                        : 'Nenhum método de pagamento ativo'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </div>
 
@@ -1020,16 +1080,19 @@ export const CartDrawer: React.FC = () => {
                 <div className="space-y-1.5 text-center">
                   <div className="flex items-center justify-center gap-1.5 text-xs text-gray-500">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Liberação imediata • Acesso instantâneo garantido</span>
+                    <span>{paymentMethod === 'crypto'
+                      ? 'Liberação após confirmação do pagamento na blockchain'
+                      : 'Pagamento protegido e liberação após confirmação'}</span>
                   </div>
 
                   {/* Gateways Trust Bar Sem Bordas */}
                   <div className="flex items-center justify-center gap-3 pt-0.5 opacity-80">
-                    <img src={GATEWAY_LOGOS.pix} alt="Pix" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />
-                    <img src={GATEWAY_LOGOS.mercadopago} alt="Mercado Pago" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />
-                    <img src={GATEWAY_LOGOS.stripe} alt="Stripe" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />
-                    <img src={GATEWAY_LOGOS.visa} alt="Visa" className="h-2.5 w-auto object-contain" style={{ border: 'none' }} />
-                    <img src={GATEWAY_LOGOS.mastercard} alt="Mastercard" className="h-3 w-auto object-contain" style={{ border: 'none' }} />
+                    {paymentAvailability.pix.enabled && <img src={GATEWAY_LOGOS.pix} alt="Pix" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />}
+                    {paymentAvailability.card.enabled && <>
+                      <img src={GATEWAY_LOGOS.visa} alt="Visa" className="h-2.5 w-auto object-contain" style={{ border: 'none' }} />
+                      <img src={GATEWAY_LOGOS.mastercard} alt="Mastercard" className="h-3 w-auto object-contain" style={{ border: 'none' }} />
+                    </>}
+                    {paymentAvailability.crypto.enabled && <img src={GATEWAY_LOGOS.usdt} alt="USDT" className="h-4 w-auto object-contain" style={{ border: 'none' }} />}
                   </div>
                 </div>
               </div>
