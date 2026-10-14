@@ -327,7 +327,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (error || !data) { showToast(error?.message || 'Não foi possível criar o pedido.', 'error'); return null; }
     const order = orderFromRow(data); setOrders(previous => [order, ...previous]);
     setCustomerUser({ email: order.customerEmail, name: order.customerName, document: order.customerDocument });
-    clearCart(); setIsCheckoutOpen(false); showToast('Pedido criado. Aguarde a confirmação do pagamento.'); return order;
+    if (value.paymentMethod !== 'crypto') {
+      clearCart();
+      setIsCheckoutOpen(false);
+    }
+    showToast('Pedido criado. Aguarde a confirmação do pagamento.'); return order;
   };
   const updateOrderStatus = async (id: string, status: Order['status']) => {
     const { error } = await supabase.from('orders').update({ status }).eq('id', id);

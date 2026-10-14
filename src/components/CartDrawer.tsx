@@ -26,10 +26,22 @@ import {
   Package,
   Truck,
   ExternalLink,
-  Coins
+  Coins,
+  RefreshCw
 } from 'lucide-react';
 
 export type CartPhase = 'cart' | 'customer' | 'payment' | 'success';
+
+interface CryptoPayment {
+  paymentId: string;
+  status: string;
+  payAddress: string;
+  payAmount: number;
+  payCurrency: string;
+  actuallyPaid: number;
+  expiresAt?: string;
+  orderPaid?: boolean;
+}
 
 export const CartDrawer: React.FC = () => {
   const { 
@@ -48,7 +60,8 @@ export const CartDrawer: React.FC = () => {
     removeCoupon,
     createOrder,
     downloadFile,
-    settings 
+    settings,
+    showToast,
   } = useStore();
 
   const navigate = useNavigate();
@@ -64,6 +77,7 @@ export const CartDrawer: React.FC = () => {
 
   // Método de Pagamento (Fase 3)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [cryptoGateway, setCryptoGateway] = useState({ enabled: false, payCurrency: 'usdttrc20', sandbox: false });
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
@@ -72,6 +86,9 @@ export const CartDrawer: React.FC = () => {
 
   // Pedido Concluído (Fase 4)
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+  const [cryptoPayment, setCryptoPayment] = useState<CryptoPayment | null>(null);
+  const [cryptoError, setCryptoError] = useState('');
+  const [copiedCryptoAddress, setCopiedCryptoAddress] = useState(false);
   const [copiedPix, setCopiedPix] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedLogins, setCopiedLogins] = useState(false);
@@ -97,6 +114,18 @@ export const CartDrawer: React.FC = () => {
     }
   }, [isCheckoutOpen]);
 
+  useEffect(() => {
+    if (!isCartOpen) return;
+    void fetch('/api/nowpayments/config', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (!data) return;
+        setCryptoGateway(data);
+        if (!data.enabled) setPaymentMethod(method => method === 'crypto' ? 'pix' : method);
+      })
+      .catch(() => setCryptoGateway(value => ({ ...value, enabled: false })));
+  }, [isCartOpen]);
+
   // Se o carrinho ficar vazio e ainda estiver nas fases de compra, voltar para 'cart'
   useEffect(() => {
     if (cart.length === 0 && phase !== 'success') {
@@ -120,6 +149,36 @@ export const CartDrawer: React.FC = () => {
     return () => clearInterval(interval);
   }, [flashDiscountActive, timeLeft]);
 
+  useEffect(() => {
+    if (!cryptoPayment || !completedOrder || cryptoPayment.orderPaid || ['finished', 'failed', 'expired'].includes(cryptoPayment.status)) return;
+
+    const checkStatus = async () => {
+      try {
+        const params = new URLSearchParams({
+          orderId: completedOrder.id,
+          downloadToken: completedOrder.downloadToken,
+        });
+        const response = await fetch(`/api/nowpayments/status?${params.toString()}`, { cache: 'no-store' });
+        const result = await response.json();
+        if (!response.ok) return;
+        setCryptoPayment(result);
+        if (result.orderPaid) {
+          setCompletedOrder(result.order || (completedOrder ? { ...completedOrder, status: 'paid' } : completedOrder));
+          setCheckoutBtnState('success');
+          clearCart();
+          setPhase('success');
+          window.setTimeout(() => setCheckoutBtnState('idle'), 700);
+        }
+      } catch {
+        // A próxima consulta automática tentará novamente.
+      }
+    };
+
+    void checkStatus();
+    const interval = window.setInterval(() => void checkStatus(), 10000);
+    return () => window.clearInterval(interval);
+  }, [cryptoPayment?.paymentId, cryptoPayment?.status, cryptoPayment?.orderPaid, completedOrder?.id]);
+
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -138,6 +197,8 @@ export const CartDrawer: React.FC = () => {
       if (phase === 'success') {
         setPhase('cart');
         setCompletedOrder(null);
+        setCryptoPayment(null);
+        setCryptoError('');
       }
     }, 500);
   };
@@ -187,8 +248,35 @@ export const CartDrawer: React.FC = () => {
     if (checkoutBtnState !== 'idle') return;
 
     setCheckoutBtnState('loading');
-    const order = await createOrder({ customerName: name, customerEmail: email, customerDocument: document, shippingAddress, paymentMethod });
+    const reusableCryptoOrder = paymentMethod === 'crypto' && completedOrder?.paymentMethod === 'crypto' && completedOrder.status === 'pending'
+      ? completedOrder
+      : null;
+    const order = reusableCryptoOrder || await createOrder({ customerName: name, customerEmail: email, customerDocument: document, shippingAddress, paymentMethod });
     if (!order) { setCheckoutBtnState('idle'); return; }
+
+    if (paymentMethod === 'crypto') {
+      setCompletedOrder(order);
+      setCryptoError('');
+      try {
+        const response = await fetch('/api/nowpayments/create-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: order.id, downloadToken: order.downloadToken }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Não foi possível gerar a cobrança em USDT.');
+        setCryptoPayment(result);
+        showToast('Cobrança NOWPayments criada. Envie o valor exato para o endereço exibido.', 'info');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Não foi possível gerar a cobrança em USDT.';
+        setCryptoError(message);
+        showToast(message, 'error');
+      } finally {
+        setCheckoutBtnState('idle');
+      }
+      return;
+    }
+
     setCheckoutBtnState('success');
     setCompletedOrder(order);
     clearCart();
@@ -674,11 +762,14 @@ export const CartDrawer: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() => setPaymentMethod('crypto')}
+                    disabled={!cryptoGateway.enabled}
+                    onClick={() => cryptoGateway.enabled && setPaymentMethod('crypto')}
                     className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
                       paymentMethod === 'crypto'
                         ? 'border-black bg-gray-50 font-semibold shadow-xs'
-                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                        : cryptoGateway.enabled
+                          ? 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                          : 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed opacity-60'
                     }`}
                   >
                     <img 
@@ -688,7 +779,9 @@ export const CartDrawer: React.FC = () => {
                       style={{ border: 'none' }} 
                     />
                     <span className="text-xs">USDT</span>
-                    <span className="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-full font-medium">Crypto</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-medium ${cryptoGateway.enabled ? 'text-amber-700 bg-amber-100' : 'text-gray-500 bg-gray-200'}`}>
+                      {cryptoGateway.enabled ? cryptoGateway.payCurrency.toUpperCase() : 'Indisponível'}
+                    </span>
                   </button>
                 </div>
 
@@ -815,7 +908,7 @@ export const CartDrawer: React.FC = () => {
 
                 {/* Conteúdo: USDT */}
                 {paymentMethod === 'crypto' && (
-                  <div className="bg-amber-50/70 border border-amber-200 p-4 rounded-xl space-y-2 text-xs text-amber-950 animate-fadeIn">
+                  <div className="bg-amber-50/70 border border-amber-200 p-4 rounded-xl space-y-3 text-xs text-amber-950 animate-fadeIn">
                     <div className="flex items-center gap-2">
                       <img 
                         src={GATEWAY_LOGOS.usdt} 
@@ -824,15 +917,50 @@ export const CartDrawer: React.FC = () => {
                         style={{ border: 'none' }} 
                       />
                       <span className="font-bold text-amber-900">
-                        Pagamento em USDT (TRC-20)
+                        Pagamento processado pela NOWPayments
                       </span>
                     </div>
-                    <p className="text-[11px] text-amber-800">
-                      Envie o equivalente a <strong>{(total / 5.2).toFixed(2)} USDT</strong> para a carteira oficial:
-                    </p>
-                    <div className="bg-white p-2 rounded border border-amber-200 font-mono text-[10px] break-all select-all">
-                      TY2kL9m8XQ5zE1n2B4vC6w7P8o0R1s2T3u
-                    </div>
+
+                    {!cryptoPayment ? (
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        Ao confirmar, a NOWPayments calcula a cotação atual e gera um endereço exclusivo para este pedido. A liberação ocorre somente após a confirmação on-chain.
+                      </p>
+                    ) : (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[11px] text-amber-800">Valor exato:</span>
+                          <strong className="text-sm text-amber-950 font-mono">
+                            {cryptoPayment.payAmount} {cryptoPayment.payCurrency?.toUpperCase()}
+                          </strong>
+                        </div>
+                        <div>
+                          <div className="text-[11px] text-amber-800 mb-1">Endereço exclusivo:</div>
+                          <div className="bg-white p-2 rounded border border-amber-200 flex items-start gap-2">
+                            <span className="font-mono text-[10px] break-all select-all flex-1">{cryptoPayment.payAddress}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void navigator.clipboard.writeText(cryptoPayment.payAddress);
+                                setCopiedCryptoAddress(true);
+                                window.setTimeout(() => setCopiedCryptoAddress(false), 2000);
+                              }}
+                              className="text-amber-800 hover:text-amber-950 font-semibold shrink-0 flex items-center gap-1 cursor-pointer"
+                            >
+                              <Copy className="w-3 h-3" /> {copiedCryptoAddress ? 'Copiado' : 'Copiar'}
+                            </button>
+                          </div>
+                        </div>
+                        <div role="status" aria-live="polite" className="flex items-center gap-2 text-[11px] text-amber-800">
+                          {!['failed', 'expired', 'refunded'].includes(cryptoPayment.status) && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                          <span>
+                            Status: <strong className="uppercase">{cryptoPayment.status}</strong>.
+                            {['failed', 'expired', 'refunded'].includes(cryptoPayment.status) ? ' Gere uma nova cobrança para tentar novamente.' : ' Verificando automaticamente...'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {cryptoError && <p role="alert" className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded p-2">{cryptoError}</p>}
                   </div>
                 )}
 
@@ -859,7 +987,7 @@ export const CartDrawer: React.FC = () => {
                         : 'opacity-0 -translate-y-5 pointer-events-none'
                     }`}
                   >
-                    <span>Confirmar e Finalizar Compra ({formatPrice(total)})</span>
+                    <span>{paymentMethod === 'crypto' ? `Gerar cobrança em USDT (${formatPrice(total)})` : `Confirmar e Finalizar Compra (${formatPrice(total)})`}</span>
                     <ArrowRight className="w-4 h-4" />
                   </div>
 

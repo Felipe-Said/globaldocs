@@ -150,20 +150,94 @@ export const AdminAPIs: React.FC = () => {
 
   const [testingConnection, setTestingConnection] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
+  const [nowPayments, setNowPayments] = useState({
+    enabled: false,
+    sandbox: true,
+    payCurrency: 'usdttrc20',
+    hasApiKey: false,
+    apiKeyHint: '',
+    hasIpnSecret: false,
+  });
+  const [nowPaymentsApiKey, setNowPaymentsApiKey] = useState('');
+  const [nowPaymentsIpnSecret, setNowPaymentsIpnSecret] = useState('');
 
   useEffect(() => {
     void supabase.from('integration_settings').select('data').eq('id', 1).maybeSingle().then(({ data, error }) => {
       if (!error && data?.data) setConfig({ ...DEFAULT_API_SETTINGS, ...(data.data as Partial<APISettings>) });
     });
+
+    void supabase.auth.getSession().then(async ({ data }) => {
+      const token = data.session?.access_token;
+      if (!token) return;
+      const response = await fetch('/api/admin/nowpayments-config', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) setNowPayments(await response.json());
+    });
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from('integration_settings').update({ data: config }).eq('id', 1);
-    showToast(error ? `Erro ao salvar integrações: ${error.message}` : 'Configurações de APIs salvas com segurança!', error ? 'error' : 'success');
+    const {
+      cryptoUsdtWallet: _legacyWallet,
+      cryptoNetwork: _legacyNetwork,
+      cryptoEnabled: _legacyEnabled,
+      ...genericConfig
+    } = config;
+    const { error } = await supabase.from('integration_settings').update({ data: genericConfig }).eq('id', 1);
+    if (error) return showToast(`Erro ao salvar integrações: ${error.message}`, 'error');
+
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return showToast('Sua sessão administrativa expirou. Entre novamente.', 'error');
+
+    const response = await fetch('/api/admin/nowpayments-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        apiKey: nowPaymentsApiKey,
+        ipnSecret: nowPaymentsIpnSecret,
+        enabled: nowPayments.enabled,
+        sandbox: nowPayments.sandbox,
+        payCurrency: nowPayments.payCurrency,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) return showToast(result.error || 'Erro ao salvar NOWPayments.', 'error');
+
+    setNowPayments(result);
+    setNowPaymentsApiKey('');
+    setNowPaymentsIpnSecret('');
+    showToast('Configurações e credenciais da NOWPayments salvas com segurança!');
   };
 
-  const handleTestConnection = (apiId: string) => {
+  const handleTestConnection = async (apiId: string) => {
+    if (apiId === 'nowpayments') {
+      setTestingConnection(apiId);
+      setTestResult(null);
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) throw new Error('Sua sessão administrativa expirou.');
+        const response = await fetch('/api/admin/nowpayments-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: 'test', apiKey: nowPaymentsApiKey, sandbox: nowPayments.sandbox }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha ao testar a NOWPayments.');
+        setTestResult({ id: apiId, success: true, message: result.message });
+        showToast('Conexão com a NOWPayments validada!');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Falha ao testar a NOWPayments.';
+        setTestResult({ id: apiId, success: false, message });
+        showToast(message, 'error');
+      } finally {
+        setTestingConnection(null);
+      }
+      return;
+    }
+
     setTestingConnection(null);
     setTestResult({ id: apiId, success: false, message: 'Teste real requer uma função segura no servidor e ainda não está configurado.' });
     showToast('A credencial pode ser salva, mas não será simulada como validada.', 'info');
@@ -776,61 +850,103 @@ export const AdminAPIs: React.FC = () => {
               </div>
             </div>
 
-            {/* Gateway 5: Crypto / USDT (Logo Tether sem borda) */}
+            {/* Gateway 5: NOWPayments / USDT */}
             <div className="bg-surface p-5 rounded-lg border border-borderSoft shadow-2xs space-y-4 text-xs">
               <div className="flex items-center justify-between pb-3 border-b border-borderSoft">
                 <div className="flex items-center gap-3">
                   <BrandLogoImg src={API_LOGOS.usdt} alt="Tether USDT" size="w-8 h-8 sm:w-9 sm:h-9" />
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-sm text-ink">USDT (Tether) & Criptoativos</h3>
+                      <h3 className="font-bold text-sm text-ink">NOWPayments — USDT (Tether) & Criptoativos</h3>
                       <span className={`text-[10px] px-2 py-0.2 rounded-full font-semibold ${
-                        config.cryptoEnabled ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
+                        nowPayments.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
                       }`}>
-                        {config.cryptoEnabled ? 'Ativo' : 'Inativo'}
+                        {nowPayments.enabled ? 'Ativo' : 'Inativo'}
                       </span>
                     </div>
                     <p className="text-[11px] text-ink-muted">Pagamentos descentralizados sem intermediários com confirmação on-chain</p>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setConfig({ ...config, cryptoEnabled: !config.cryptoEnabled })}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors cursor-pointer ${
-                    config.cryptoEnabled
-                      ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
-                      : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                  }`}
-                >
-                  {config.cryptoEnabled ? 'Desativar' : 'Ativar'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleTestConnection('nowpayments')}
+                    disabled={testingConnection === 'nowpayments'}
+                    className="px-3 py-1.5 rounded-md text-xs font-semibold border border-borderSoft bg-surface-warm hover:bg-black/[0.04] transition-colors cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${testingConnection === 'nowpayments' ? 'animate-spin' : ''}`} />
+                    <span>{testingConnection === 'nowpayments' ? 'Testando...' : 'Testar'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNowPayments(value => ({ ...value, enabled: !value.enabled }))}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors cursor-pointer ${
+                      nowPayments.enabled
+                        ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                    }`}
+                  >
+                    {nowPayments.enabled ? 'Desativar' : 'Ativar'}
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-medium text-ink mb-1">Carteira USDT</label>
+                  <label className="block font-medium text-ink mb-1">API Key da NOWPayments</label>
                   <input
-                    type="text"
-                    value={config.cryptoUsdtWallet}
-                    onChange={(e) => setConfig({ ...config, cryptoUsdtWallet: e.target.value })}
+                    type="password"
+                    autoComplete="off"
+                    value={nowPaymentsApiKey}
+                    onChange={(e) => setNowPaymentsApiKey(e.target.value)}
+                    placeholder={nowPayments.hasApiKey ? `Configurada (${nowPayments.apiKeyHint}) — deixe vazio para manter` : 'Cole a API Key'}
                     className="w-full px-3 py-2 bg-surface-warm border border-borderSoft rounded-md text-ink font-mono text-xs focus:bg-white focus:border-primary"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium text-ink mb-1">Rede Blockchain</label>
+                  <label className="block font-medium text-ink mb-1">IPN Secret Key</label>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={nowPaymentsIpnSecret}
+                    onChange={(e) => setNowPaymentsIpnSecret(e.target.value)}
+                    placeholder={nowPayments.hasIpnSecret ? 'Configurado — deixe vazio para manter' : 'Cole o IPN Secret'}
+                    className="w-full px-3 py-2 bg-surface-warm border border-borderSoft rounded-md text-ink font-mono text-xs focus:bg-white focus:border-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-medium text-ink mb-1">Rede para recebimento em USDT</label>
                   <select
-                    value={config.cryptoNetwork}
-                    onChange={(e) => setConfig({ ...config, cryptoNetwork: e.target.value })}
+                    value={nowPayments.payCurrency}
+                    onChange={(e) => setNowPayments(value => ({ ...value, payCurrency: e.target.value }))}
                     className="w-full px-3 py-2 bg-surface-warm border border-borderSoft rounded-md text-ink text-xs focus:bg-white focus:border-primary cursor-pointer"
                   >
-                    <option value="TRC-20">TRON (TRC-20 - Taxas Baixas)</option>
-                    <option value="BEP-20">BNB Chain (BEP-20)</option>
-                    <option value="ERC-20">Ethereum (ERC-20)</option>
-                    <option value="POLYGON">Polygon (MATIC)</option>
+                    <option value="usdttrc20">TRON (USDTTRC20 — taxas baixas)</option>
+                    <option value="usdtbsc">BNB Smart Chain (USDTBSC)</option>
+                    <option value="usdterc20">Ethereum (USDTERC20)</option>
+                    <option value="usdtmatic">Polygon (USDTMATIC)</option>
                   </select>
                 </div>
+
+                <div className="flex items-center gap-2 pt-6">
+                  <input
+                    type="checkbox"
+                    id="nowPaymentsSandbox"
+                    checked={nowPayments.sandbox}
+                    onChange={(e) => setNowPayments(value => ({ ...value, sandbox: e.target.checked }))}
+                    className="w-4 h-4 rounded text-primary cursor-pointer"
+                  />
+                  <label htmlFor="nowPaymentsSandbox" className="text-xs text-ink cursor-pointer font-medium">
+                    Ambiente Sandbox (testes)
+                  </label>
+                </div>
+              </div>
+
+              <div className="rounded-md bg-blue-50 border border-blue-100 p-3 text-[11px] text-blue-900 leading-relaxed">
+                Configure sua carteira de recebimento na conta NOWPayments. URL de IPN: <span className="font-mono break-all">https://globaldocs.vercel.app/api/nowpayments/ipn</span>
               </div>
             </div>
 
@@ -839,8 +955,14 @@ export const AdminAPIs: React.FC = () => {
 
         {/* Feedback de Teste */}
         {testResult && (
-          <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2 animate-fadeIn">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <div
+            role={testResult.success ? 'status' : 'alert'}
+            aria-live="polite"
+            className={`p-3.5 rounded-lg border text-xs flex items-center gap-2 animate-fadeIn ${
+            testResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'
+          }`}
+          >
+            <CheckCircle2 className={`w-4 h-4 shrink-0 ${testResult.success ? 'text-emerald-600' : 'text-rose-600'}`} />
             <span>{testResult.message}</span>
           </div>
         )}
@@ -849,7 +971,7 @@ export const AdminAPIs: React.FC = () => {
         <div className="pt-3 flex items-center justify-between border-t border-borderSoft">
           <div className="flex items-center gap-1.5 text-[11px] text-ink-muted">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Chaves e secrets armazenados com criptografia de sessão local</span>
+            <span>Secrets protegidos no servidor e nunca retornados ao navegador</span>
           </div>
 
           <button
