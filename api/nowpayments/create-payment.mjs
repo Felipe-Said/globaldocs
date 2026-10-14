@@ -42,7 +42,7 @@ export default async function handler(request, response) {
     const quote = await getNowPaymentsQuote(settings, order.total);
     if (!quote.meetsMinimum) {
       return json(response, 422, {
-        error: `O valor mínimo atual da NOWPayments é ${quote.minAmount.toLocaleString('pt-BR', { maximumFractionDigits: 6 })} ${settings.pay_currency.toUpperCase()}.`,
+        error: `O valor mínimo atual para pagamento em USDT é ${quote.minAmount.toLocaleString('pt-BR', { maximumFractionDigits: 6 })} ${settings.pay_currency.toUpperCase()}.`,
         minimumAmount: quote.minAmount,
         estimatedAmount: quote.estimatedAmount,
       });
@@ -92,6 +92,9 @@ export default async function handler(request, response) {
 
     return json(response, 201, publicPayment(saved));
   } catch (error) {
-    return json(response, error.status || 500, { error: error.message || 'Não foi possível criar a cobrança em cripto.' });
+    const publicMessage = error.status === 403
+      ? 'A forma de pagamento em USDT está temporariamente indisponível.'
+      : 'Não foi possível gerar a cobrança em USDT. Verifique o valor mínimo e tente novamente.';
+    return json(response, error.status || 500, { error: publicMessage });
   }
 }

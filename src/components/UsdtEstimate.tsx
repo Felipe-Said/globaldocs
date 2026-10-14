@@ -1,7 +1,7 @@
 import React from 'react';
 import { Coins } from 'lucide-react';
 
-interface Quote {
+export interface UsdtQuote {
   enabled: boolean;
   estimatedAmount?: number;
   payCurrency?: string;
@@ -13,19 +13,22 @@ interface Quote {
 interface UsdtEstimateProps {
   amount: number;
   compact?: boolean;
+  onQuote?: (quote: UsdtQuote | null) => void;
 }
 
-export const UsdtEstimate: React.FC<UsdtEstimateProps> = ({ amount, compact = false }) => {
-  const [quote, setQuote] = React.useState<Quote | null>(null);
+export const UsdtEstimate: React.FC<UsdtEstimateProps> = ({ amount, compact = false, onQuote }) => {
+  const [quote, setQuote] = React.useState<UsdtQuote | null>(null);
 
   React.useEffect(() => {
     if (!Number.isFinite(amount) || amount <= 0) {
       setQuote(null);
+      onQuote?.(null);
       return;
     }
 
     const controller = new AbortController();
     setQuote(null);
+    onQuote?.(null);
     void fetch(`/api/nowpayments/estimate?amount=${encodeURIComponent(amount.toFixed(2))}`, {
       cache: 'no-store',
       signal: controller.signal,
@@ -33,10 +36,13 @@ export const UsdtEstimate: React.FC<UsdtEstimateProps> = ({ amount, compact = fa
       .then(async response => {
         const result = await response.json();
         if (!response.ok && !result.enabled) return null;
-        return result as Quote;
+        return result as UsdtQuote;
       })
       .then(result => {
-        if (result) setQuote(result);
+        if (result) {
+          setQuote(result);
+          onQuote?.(result);
+        }
       })
       .catch(error => {
         if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -44,7 +50,7 @@ export const UsdtEstimate: React.FC<UsdtEstimateProps> = ({ amount, compact = fa
       });
 
     return () => controller.abort();
-  }, [amount]);
+  }, [amount, onQuote]);
 
   if (!quote?.enabled) return null;
 

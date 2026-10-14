@@ -3,7 +3,7 @@ import { useStore } from '../context/StoreContext';
 import { detectBrands } from '../utils/brandDetection';
 import { detectCountries } from '../utils/countryDetection';
 import { CountryBadgesList } from './CountryBadge';
-import { UsdtEstimate } from './UsdtEstimate';
+import { UsdtEstimate, UsdtQuote } from './UsdtEstimate';
 import { GATEWAY_LOGOS } from '../utils/gatewayLogos';
 import { Order, PaymentMethod } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -91,6 +91,7 @@ export const CartDrawer: React.FC = () => {
   });
   const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(true);
   const [cryptoGateway, setCryptoGateway] = useState({ enabled: false, payCurrency: 'usdttrc20', sandbox: false });
+  const [cartQuote, setCartQuote] = useState<UsdtQuote | null>(null);
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
@@ -276,7 +277,20 @@ export const CartDrawer: React.FC = () => {
     }
 
     setCheckoutBtnState('loading');
-    const reusableCryptoOrder = paymentMethod === 'crypto' && completedOrder?.paymentMethod === 'crypto' && completedOrder.status === 'pending'
+    const pendingItems = (completedOrder?.items || []) as Array<{ productId: string; quantity?: number }>;
+    const pendingOrderMatchesCart = Boolean(
+      completedOrder
+      && Math.abs(completedOrder.total - total) < 0.01
+      && pendingItems.length === cart.length
+      && pendingItems.every(orderItem => cart.some(cartItem =>
+        cartItem.product.id === orderItem.productId
+        && cartItem.quantity === Number(orderItem.quantity || 1)
+      ))
+    );
+    const reusableCryptoOrder = paymentMethod === 'crypto'
+      && completedOrder?.paymentMethod === 'crypto'
+      && completedOrder.status === 'pending'
+      && pendingOrderMatchesCart
       ? completedOrder
       : null;
     const order = reusableCryptoOrder || await createOrder({ customerName: name, customerEmail: email, customerDocument: document, shippingAddress, paymentMethod });
@@ -294,7 +308,7 @@ export const CartDrawer: React.FC = () => {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Não foi possível gerar a cobrança em USDT.');
         setCryptoPayment(result);
-        showToast('Cobrança NOWPayments criada. Envie o valor exato para o endereço exibido.', 'info');
+        showToast('Cobrança em USDT criada. Envie o valor exato para o endereço exibido.', 'info');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Não foi possível gerar a cobrança em USDT.';
         setCryptoError(message);
@@ -335,6 +349,25 @@ export const CartDrawer: React.FC = () => {
     : availablePaymentCount === 2
       ? 'grid-cols-2'
       : 'grid-cols-3';
+  const cryptoIsOnlyPayment = availablePaymentCount === 1 && paymentAvailability.crypto.enabled;
+  const cryptoQuotePending = cryptoIsOnlyPayment && !cartQuote;
+  const cryptoQuoteUnavailable = cryptoIsOnlyPayment && Boolean(cartQuote?.error);
+  const cryptoMinimumInsufficient = cryptoIsOnlyPayment && cartQuote?.meetsMinimum === false;
+  const cartAdvanceBlocked = paymentMethodsLoading
+    || availablePaymentCount === 0
+    || cryptoQuotePending
+    || cryptoQuoteUnavailable
+    || cryptoMinimumInsufficient;
+  const minimumLabel = Number(cartQuote?.minAmount || 0).toLocaleString('pt-BR', { maximumFractionDigits: 6 });
+  const cartAdvanceLabel = paymentMethodsLoading || cryptoQuotePending
+    ? 'Verificando valor mínimo...'
+    : availablePaymentCount === 0
+      ? 'Nenhuma forma de pagamento disponível'
+      : cryptoQuoteUnavailable
+        ? 'Cotação em USDT indisponível'
+        : cryptoMinimumInsufficient
+          ? `Valor mínimo insuficiente — mínimo ${minimumLabel} USDT`
+          : 'Avançar para Identificação';
 
   return (
     <div 
@@ -625,14 +658,26 @@ export const CartDrawer: React.FC = () => {
                       </div>
                     </div>
 
+                    {cryptoGateway.enabled && (
+                      <UsdtEstimate amount={total} onQuote={setCartQuote} />
+                    )}
+
                     {/* Botão de Avançar com Feedback Tátil */}
                     <button 
                       onClick={handleGoToCustomerPhase}
-                      className="w-full bg-black hover:bg-neutral-900 text-white rounded-xl h-[54px] flex items-center justify-center gap-2 font-medium shadow-md transition-all duration-300 active:scale-[0.96] cursor-pointer"
+                      disabled={cartAdvanceBlocked}
+                      aria-describedby={cryptoMinimumInsufficient ? 'crypto-minimum-help' : undefined}
+                      className="w-full bg-black hover:bg-neutral-900 text-white rounded-xl min-h-[54px] px-4 py-3 flex items-center justify-center gap-2 text-center text-sm font-medium shadow-md transition-all duration-300 active:scale-[0.96] cursor-pointer disabled:bg-gray-200 disabled:text-gray-600 disabled:shadow-none disabled:cursor-not-allowed disabled:active:scale-100"
                     >
-                      <span>Avançar para Identificação</span>
-                      <ArrowRight className="w-4 h-4" />
+                      <span>{cartAdvanceLabel}</span>
+                      {!cartAdvanceBlocked && <ArrowRight className="w-4 h-4 shrink-0" />}
                     </button>
+
+                    {cryptoMinimumInsufficient && (
+                      <p id="crypto-minimum-help" role="alert" className="text-center text-[11px] leading-relaxed text-amber-800">
+                        Adicione mais itens ao carrinho para atingir o valor mínimo exigido para pagamento em USDT.
+                      </p>
+                    )}
 
                     <div className="flex items-center justify-center gap-1.5 text-xs text-gray-500">
                       <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -970,7 +1015,7 @@ export const CartDrawer: React.FC = () => {
                         style={{ border: 'none' }} 
                       />
                       <span className="font-bold text-amber-900">
-                        Pagamento processado pela NOWPayments
+                        Pagamento em USDT
                       </span>
                     </div>
 
@@ -978,7 +1023,7 @@ export const CartDrawer: React.FC = () => {
                       <div className="space-y-3">
                         <UsdtEstimate amount={total} />
                         <p className="text-[11px] text-amber-800 leading-relaxed">
-                          Ao confirmar, a NOWPayments fixa a cotação atual e gera um endereço exclusivo para este pedido. A liberação ocorre somente após a confirmação on-chain.
+                          Ao confirmar, a cotação é fixada e um endereço exclusivo é gerado para este pedido. A liberação ocorre somente após a confirmação on-chain.
                         </p>
                       </div>
                     ) : (
