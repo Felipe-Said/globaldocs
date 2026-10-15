@@ -2,7 +2,7 @@ import React from 'react';
 import { useStore } from '../context/StoreContext';
 import { 
   Home, 
-  DownloadCloud, 
+  UserRound,
   ShoppingBag, 
   Search
 } from 'lucide-react';
@@ -32,24 +32,24 @@ export const MobileBottomNav: React.FC = () => {
           <span className="text-[11px] mt-0.5 tracking-tight">Início</span>
         </Link>
 
-        {/* Tab 2: Downloads */}
+        {/* Tab 2: Conta */}
         <Link
-          to="/downloads"
+          to="/conta"
           className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
-            location.pathname === '/downloads' 
+            location.pathname === '/conta' || location.pathname === '/downloads'
               ? 'text-primary font-semibold' 
               : 'text-ink-muted hover:text-ink'
           }`}
         >
           <div className="relative">
-            <DownloadCloud className={`w-5 h-5 transition-transform ${location.pathname === '/downloads' ? 'scale-110' : ''}`} />
+            <UserRound className={`w-5 h-5 transition-transform ${location.pathname === '/conta' || location.pathname === '/downloads' ? 'scale-110' : ''}`} />
             {paidOrdersCount > 0 && (
               <span className="absolute -top-1 -right-2 bg-primary text-white text-[9px] font-bold px-1 rounded-full min-w-3.5 text-center leading-tight">
                 {paidOrdersCount}
               </span>
             )}
           </div>
-          <span className="text-[11px] mt-0.5 tracking-tight">Meus Downloads</span>
+          <span className="text-[11px] mt-0.5 tracking-tight">Minha Conta</span>
         </Link>
 
         {/* Tab 3: Sacola de Compras */}

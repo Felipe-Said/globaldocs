@@ -96,10 +96,10 @@ export const Footer: React.FC = () => {
             <ul className="space-y-2 text-xs text-ink-muted">
               <li>
                 <Link 
-                  to="/downloads"
+                  to="/conta"
                   className="hover:text-primary transition-colors cursor-pointer text-left block"
                 >
-                  Meus Downloads & Pedidos
+                  Minha Conta & Pedidos
                 </Link>
               </li>
               <li>

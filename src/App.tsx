@@ -97,7 +97,12 @@ export default function App() {
             </PublicLayout>
           } />
 
-          {/* Customer Downloads Route */}
+          {/* Customer Account Routes */}
+          <Route path="/conta" element={
+            <PublicLayout>
+              <MyDownloadsView />
+            </PublicLayout>
+          } />
           <Route path="/downloads" element={
             <PublicLayout>
               <MyDownloadsView />

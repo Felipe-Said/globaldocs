@@ -3,7 +3,7 @@ import { useStore } from '../context/StoreContext';
 import { 
   FileText, 
   ShoppingBag, 
-  DownloadCloud, 
+  UserRound,
   Search,
   X
 } from 'lucide-react';
@@ -54,15 +54,15 @@ export const Header: React.FC = () => {
               Catálogo de Arquivos
             </Link>
             <Link
-              to="/downloads"
+              to="/conta"
               className={`h-[30px] px-3 rounded-xs text-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
-                location.pathname === '/downloads'
+                location.pathname === '/conta' || location.pathname === '/downloads'
                   ? 'bg-primary-tint text-primary-pressed font-semibold'
                   : 'text-ink/90 hover:bg-black/[0.05]'
               }`}
             >
-              <DownloadCloud className="w-3.5 h-3.5" />
-              <span>Meus Downloads</span>
+              <UserRound className="w-3.5 h-3.5" />
+              <span>{customerUser ? 'Minha Conta' : 'Entrar'}</span>
               {customerUser && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title={`Conectado como ${customerUser.email}`} />
               )}

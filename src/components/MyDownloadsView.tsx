@@ -1,440 +1,236 @@
-import React, { useState } from 'react';
-import { useStore } from '../context/StoreContext';
-import { 
-  DownloadCloud, 
-  FileText, 
-  Download, 
-  Key, 
-  Calendar, 
-  CheckCircle, 
-  Clock, 
-  Search, 
-  ShieldCheck, 
-  Package, 
-  Building2, 
-  CreditCard, 
-  FileCheck, 
-  Truck,
-  User,
-  LogOut,
-  Mail,
-  Lock,
-  ArrowRight,
-  AlertCircle,
-  Copy,
-  ExternalLink
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  AlertCircle, ArrowLeft, ArrowRight, Building2, Calendar, CheckCircle, Clock, Copy,
+  CreditCard, Download, Eye, EyeOff, FileCheck, FileText, Key, LoaderCircle,
+  LockKeyhole, LogOut, Mail, PackageCheck, RefreshCw, Search, ShieldCheck,
+  ShoppingBag, UserRound,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useStore } from '../context/StoreContext';
+import { MonkeyLoginAvatar } from './MonkeyLoginAvatar';
+
+type AccessStep = 'email' | 'code';
 
 export const MyDownloadsView: React.FC = () => {
-  const { 
-    orders, 
-    downloadFile, 
-    customerUser, 
-    customerLogin, 
-    customerLogout 
+  const {
+    orders, downloadFile, customerUser, requestCustomerCode, verifyCustomerCode,
+    refreshCustomerOrders, customerLogout, setIsCheckoutOpen,
   } = useStore();
-
-  // Estados de Login
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [step, setStep] = useState<AccessStep>('email');
   const [emailInput, setEmailInput] = useState('');
-  const [orderCodeInput, setOrderCodeInput] = useState('');
-  const [loginError, setLoginError] = useState('');
+  const [codeInput, setCodeInput] = useState('');
+  const [showCode, setShowCode] = useState(false);
+  const [fieldFocused, setFieldFocused] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  // Estados de Pesquisa interna
+  const [resendIn, setResendIn] = useState(0);
   const [filterQuery, setFilterQuery] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const shouldReturnToCheckout = new URLSearchParams(location.search).get('return') === 'checkout';
 
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = window.setInterval(() => setResendIn(value => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [resendIn]);
+
+  const sendCode = async () => {
+    setFeedback(null);
     setIsLoading(true);
-
-    const result = await customerLogin(emailInput, orderCodeInput);
+    const result = await requestCustomerCode(emailInput);
     setIsLoading(false);
-    if (!result.success) setLoginError(result.message);
+    if (!result.success) {
+      setFeedback({ type: 'error', message: result.message });
+      return;
+    }
+    setStep('code');
+    setResendIn(60);
+    setFeedback({ type: 'success', message: result.message });
   };
 
-  const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(id);
-    setTimeout(() => setCopiedKey(null), 2000);
+  const handleEmailSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    await sendCode();
   };
 
-  const getItemTypeBadge = (type: string) => {
-    switch (type) {
-      case 'llc':
-        return <span className="whitespace-nowrap shrink-0 bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1"><Building2 className="w-3 h-3 shrink-0" /> LLC</span>;
-      case 'contas':
-        return <span className="whitespace-nowrap shrink-0 bg-indigo-100 text-indigo-800 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1"><CreditCard className="w-3 h-3 shrink-0" /> Contas</span>;
-      default:
-        return <span className="whitespace-nowrap shrink-0 bg-blue-100 text-blue-800 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1"><FileCheck className="w-3 h-3 shrink-0" /> Digital</span>;
+  const handleCodeSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setFeedback(null);
+    setIsLoading(true);
+    const result = await verifyCustomerCode(emailInput, codeInput);
+    setIsLoading(false);
+    if (!result.success) {
+      setFeedback({ type: 'error', message: result.message });
+      return;
+    }
+    if (shouldReturnToCheckout) {
+      navigate('/', { replace: true });
+      window.setTimeout(() => setIsCheckoutOpen(true), 0);
     }
   };
 
-  // =========================================================================
-  // CASO 1: CLIENTE NÃO AUTENTICADO -> TELA DE LOGIN / SOLICITAÇÃO DE ACESSO
-  // =========================================================================
+  const handleCopy = async (text: string, id: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedKey(id);
+    window.setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const getItemTypeBadge = (type: string) => {
+    if (type === 'llc') return <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800"><Building2 className="h-3 w-3" aria-hidden="true" /> LLC</span>;
+    if (type === 'contas') return <span className="inline-flex items-center gap-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800"><CreditCard className="h-3 w-3" aria-hidden="true" /> Contas</span>;
+    return <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800"><FileCheck className="h-3 w-3" aria-hidden="true" /> Digital</span>;
+  };
+
+  const myOrders = useMemo(() => customerUser
+    ? orders.filter(order => order.customerEmail.toLowerCase().trim() === customerUser.email.toLowerCase().trim())
+    : [], [customerUser, orders]);
+  const paidOrders = myOrders.filter(order => order.status === 'paid');
+  const pendingOrders = myOrders.filter(order => order.status === 'pending');
+  const filteredOrders = myOrders.filter(order => {
+    const query = filterQuery.toLowerCase().trim();
+    return !query || order.id.toLowerCase().includes(query) || order.items.some(item => item.productTitle.toLowerCase().includes(query));
+  });
+
   if (!customerUser) {
     return (
-      <div className="max-w-md mx-auto px-4 py-16 sm:py-24 animate-fadeIn">
-        <div className="bg-surface rounded-xl border border-borderSoft shadow-sm p-6 sm:p-8 space-y-6">
-          
-          {/* Header do Card */}
-          <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-full bg-primary-tint text-primary mx-auto flex items-center justify-center shadow-xs">
-              <DownloadCloud className="w-6 h-6" />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-ink tracking-tight">
-              Acessar Meus Downloads
-            </h1>
-            <p className="text-xs text-ink-muted leading-relaxed">
-              Para sua privacidade e segurança, informe o e-mail cadastrado na finalização da compra para visualizar seus arquivos e credenciais.
+      <section className="bg-surface-warm px-4 py-12 sm:py-20">
+        <div className="mx-auto w-full max-w-[380px] animate-fadeIn rounded-2xl border border-borderSoft bg-surface p-6 shadow-notion-modal sm:p-8">
+          <div className="mb-7 text-center">
+            <MonkeyLoginAvatar covered={step === 'code' && !showCode} active={fieldFocused} />
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Área do cliente</p>
+            <h1 className="text-2xl font-bold tracking-tight text-ink">{step === 'email' ? 'Criar ou acessar conta' : 'Digite o código recebido'}</h1>
+            <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+              {step === 'email'
+                ? 'Informe seu e-mail. Enviaremos um código único para entrar com segurança.'
+                : <>Enviamos um código temporário para <strong className="font-semibold text-ink">{emailInput}</strong>.</>}
             </p>
           </div>
 
-          {/* Mensagem de Erro se houver */}
-          {loginError && (
-            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2 animate-fadeIn">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-              <span>{loginError}</span>
+          {feedback && (
+            <div role={feedback.type === 'error' ? 'alert' : 'status'} className={`mb-5 flex items-start gap-2 rounded-xl border p-3 text-xs leading-relaxed ${feedback.type === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+              {feedback.type === 'error' ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> : <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />}
+              <span>{feedback.message}</span>
             </div>
           )}
 
-          {/* Formulário de Identificação */}
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-ink mb-1.5">
-                E-mail da Compra <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
-                <input
-                  type="email"
-                  required
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="seu.email@exemplo.com"
-                  className="w-full pl-9 pr-3 py-2 text-xs bg-surface-warm border border-borderSoft rounded-lg text-ink focus:bg-white focus:border-primary transition-all"
-                />
+          {step === 'email' ? (
+            <form onSubmit={handleEmailSubmit} className="space-y-5">
+              <div>
+                <label htmlFor="customer-email" className="mb-2 block text-xs font-semibold text-ink">Seu e-mail</label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
+                  <input id="customer-email" type="email" autoComplete="email" inputMode="email" required value={emailInput} onFocus={() => setFieldFocused(true)} onBlur={() => setFieldFocused(false)} onChange={event => setEmailInput(event.target.value)} placeholder="voce@exemplo.com" className="min-h-12 w-full rounded-xl border border-borderSoft bg-surface-warm py-3 pl-10 pr-3 text-base text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15" />
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-muted">Esse e-mail será usado para seus pedidos, arquivos e acessos.</p>
               </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-ink">
-                  Token seguro do pedido
-                </label>
-                <span className="text-[10px] text-ink-muted">Obrigatório</span>
+              <button type="submit" disabled={isLoading} className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-pressed focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                {isLoading ? <><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Enviando código...</> : <>Enviar código de acesso <ArrowRight className="h-4 w-4" aria-hidden="true" /></>}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleCodeSubmit} className="space-y-5">
+              <div>
+                <label htmlFor="customer-code" className="mb-2 block text-xs font-semibold text-ink">Código de acesso</label>
+                <div className="relative">
+                  <Key className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
+                  <input id="customer-code" type={showCode ? 'text' : 'password'} autoComplete="one-time-code" inputMode="numeric" required autoFocus value={codeInput} onFocus={() => setFieldFocused(true)} onBlur={() => setFieldFocused(false)} onChange={event => setCodeInput(event.target.value.replace(/\s/g, ''))} placeholder="Cole o código do e-mail" className="min-h-12 w-full rounded-xl border border-borderSoft bg-surface-warm py-3 pl-10 pr-12 text-base tracking-[0.18em] text-ink outline-none transition-colors placeholder:tracking-normal placeholder:text-ink-faint focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15" />
+                  <button type="button" onClick={() => setShowCode(value => !value)} aria-label={showCode ? 'Ocultar código' : 'Mostrar código'} aria-pressed={showCode} className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-ink-muted hover:bg-black/[0.05] hover:text-ink focus:outline-none focus:ring-2 focus:ring-primary">
+                    {showCode ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                  </button>
+                </div>
               </div>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
-                <input
-                  type="text"
-                  required
-                  value={orderCodeInput}
-                  onChange={(e) => setOrderCodeInput(e.target.value)}
-                  placeholder="Ex: tk_..."
-                  className="w-full pl-9 pr-3 py-2 text-xs bg-surface-warm border border-borderSoft rounded-lg text-ink focus:bg-white focus:border-primary transition-all font-mono"
-                />
+              <button type="submit" disabled={isLoading} className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-pressed focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                {isLoading ? <><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Validando...</> : <>Entrar na minha conta <ArrowRight className="h-4 w-4" aria-hidden="true" /></>}
+              </button>
+              <div className="flex flex-col items-center gap-1 text-xs">
+                <button type="button" disabled={isLoading || resendIn > 0} onClick={() => void sendCode()} className="min-h-11 cursor-pointer px-3 font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:text-ink-faint disabled:no-underline">{resendIn > 0 ? `Reenviar código em ${resendIn}s` : 'Reenviar código'}</button>
+                <button type="button" onClick={() => { setStep('email'); setCodeInput(''); setFeedback(null); }} className="flex min-h-11 cursor-pointer items-center gap-1 px-3 text-ink-muted hover:text-ink"><ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Usar outro e-mail</button>
               </div>
-            </div>
+            </form>
+          )}
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-10 rounded-lg bg-primary hover:bg-primary-pressed text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-[0.98] disabled:opacity-50"
-            >
-              {isLoading ? (
-                <span>Verificando pedidos...</span>
-              ) : (
-                <>
-                  <span>Entrar e Ver Downloads</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Dica de Segurança e Link para Loja */}
-          <div className="pt-4 border-t border-borderSoft space-y-3 text-center">
-            <div className="flex items-center justify-center gap-1.5 text-[11px] text-ink-muted">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Downloads liberados exclusivamente após pagamento confirmado</span>
-            </div>
-            
-            <p className="text-xs text-ink-muted">
-              Ainda não realizou uma compra?{' '}
-              <Link to="/" className="text-primary font-semibold hover:underline">
-                Explorar Catálogo
-              </Link>
-            </p>
+          <div className="mt-6 border-t border-borderSoft pt-5 text-center">
+            <p className="flex items-center justify-center gap-1.5 text-[11px] text-ink-muted"><ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" /> Código temporário. Nenhuma senha para memorizar.</p>
+            <Link to="/" className="mt-3 inline-flex min-h-11 items-center text-xs font-semibold text-primary hover:underline">Voltar ao catálogo</Link>
           </div>
-
         </div>
-      </div>
+      </section>
     );
   }
 
-  // =========================================================================
-  // CASO 2: CLIENTE AUTENTICADO -> MOSTRA EXCLUSIVAMENTE OS DOWNLOADS DELE
-  // =========================================================================
-  const myOrders = orders.filter(
-    o => o.customerEmail.toLowerCase().trim() === customerUser.email.toLowerCase().trim()
-  );
-
-  const myPaidOrders = myOrders.filter(o => o.status === 'paid');
-
-  const filteredOrders = myOrders.filter(order => 
-    order.id.toLowerCase().includes(filterQuery.toLowerCase()) ||
-    order.items.some(item => item.productTitle.toLowerCase().includes(filterQuery.toLowerCase()))
-  );
-
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-fadeIn">
-      
-      {/* Barra de Perfil Autenticado */}
-      <div className="mb-8 p-4 rounded-xl bg-surface border border-borderSoft flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary-tint text-primary flex items-center justify-center font-bold text-sm shrink-0">
-            {customerUser.name ? customerUser.name.charAt(0).toUpperCase() : <User className="w-5 h-5" />}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-bold text-ink">
-                {customerUser.name || 'Cliente Conectado'}
-              </h3>
-              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-semibold px-2 py-0.2 rounded-full flex items-center gap-1">
-                <CheckCircle className="w-2.5 h-2.5" /> Acesso Verificado
-              </span>
+    <main className="mx-auto max-w-7xl animate-fadeIn px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+      <section className="mb-8 overflow-hidden rounded-2xl border border-borderSoft bg-surface shadow-xs">
+        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-tint font-bold text-primary">{customerUser.name ? customerUser.name.charAt(0).toUpperCase() : <UserRound className="h-5 w-5" aria-hidden="true" />}</div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-ink">{customerUser.name || 'Minha conta'}</h1><span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800"><CheckCircle className="h-3 w-3" aria-hidden="true" /> Verificada</span></div>
+              <p className="truncate text-xs text-ink-muted">{customerUser.email}</p>
             </div>
-            <p className="text-[11px] text-ink-muted font-mono">
-              {customerUser.email}
-            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void refreshCustomerOrders()} className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl border border-borderSoft px-3 text-xs font-semibold text-ink transition-colors hover:bg-surface-warm focus:outline-none focus:ring-2 focus:ring-primary"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Atualizar</button>
+            <button type="button" onClick={() => void customerLogout()} className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl border border-rose-200 px-3 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500"><LogOut className="h-3.5 w-3.5" aria-hidden="true" /> Sair</button>
           </div>
         </div>
+      </section>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={customerLogout}
-            className="h-8 px-3 rounded-lg border border-borderSoft bg-surface-warm hover:bg-black/[0.05] text-ink text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5 text-rose-600" />
-            <span>Sair da Conta</span>
-          </button>
-          
-          <Link
-            to="/"
-            className="h-8 px-3 rounded-lg bg-primary hover:bg-primary-pressed text-white text-xs font-semibold flex items-center gap-1 transition-colors shadow-2xs"
-          >
-            <span>Catálogo</span>
-          </Link>
-        </div>
+      <header className="mb-6">
+        <p className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary"><PackageCheck className="h-4 w-4" aria-hidden="true" /> Painel do cliente</p>
+        <h2 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">Pedidos e downloads</h2>
+        <p className="mt-1 max-w-2xl text-sm text-ink-muted">Acompanhe pagamentos e acesse arquivos e credenciais já liberados.</p>
+      </header>
+
+      <section aria-label="Resumo dos pedidos" className="mb-7 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-borderSoft bg-surface p-4"><p className="text-xs text-ink-muted">Pedidos</p><p className="mt-1 text-2xl font-bold tabular-nums text-ink">{myOrders.length}</p></div>
+        <div className="rounded-xl border border-borderSoft bg-surface p-4"><p className="text-xs text-ink-muted">Liberados</p><p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700">{paidOrders.length}</p></div>
+        <div className="col-span-2 rounded-xl border border-borderSoft bg-surface p-4 sm:col-span-1"><p className="text-xs text-ink-muted">Aguardando pagamento</p><p className="mt-1 text-2xl font-bold tabular-nums text-amber-700">{pendingOrders.length}</p></div>
+      </section>
+
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full max-w-sm"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" /><label htmlFor="order-search" className="sr-only">Buscar pedido</label><input id="order-search" type="search" value={filterQuery} onChange={event => setFilterQuery(event.target.value)} placeholder="Buscar item ou número do pedido" className="min-h-11 w-full rounded-xl border border-borderSoft bg-surface-warm py-2 pl-10 pr-3 text-sm text-ink outline-none focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15" /></div>
+        <Link to="/" className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-xs font-semibold text-white transition-colors hover:bg-primary-pressed"><ShoppingBag className="h-4 w-4" aria-hidden="true" /> Continuar comprando</Link>
       </div>
 
-      {/* Page Title */}
-      <div className="pb-6 border-b border-borderSoft mb-8">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary mb-1">
-          <DownloadCloud className="w-4 h-4" />
-          <span>Biblioteca Pessoal de Documentos</span>
-        </div>
-        <h1 className="text-3xl font-bold text-ink tracking-tight">
-          Meus Downloads & Pedidos
-        </h1>
-        <p className="text-sm text-ink-muted mt-1">
-          Acesse seus arquivos digitais, pacotes de LLC, credenciais e acompanhamento das suas compras.
-        </p>
-      </div>
-
-      {/* Filter / Search Bar */}
-      <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
-        <div className="relative w-full max-w-sm">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
-          <input
-            type="text"
-            placeholder="Filtrar por item ou ID do pedido..."
-            value={filterQuery}
-            onChange={(e) => setFilterQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-surface-warm border border-borderSoft rounded-lg text-ink focus:bg-white focus:border-primary transition-all"
-          />
-        </div>
-
-        <div className="text-xs text-ink-muted">
-          Total de <strong>{myPaidOrders.length}</strong> compras pagas e liberadas
-        </div>
-      </div>
-
-      {/* Orders List */}
       {filteredOrders.length === 0 ? (
-        <div className="bg-surface rounded-xl border border-borderSoft p-12 text-center space-y-3">
-          <div className="w-12 h-12 rounded-full bg-surface-warm mx-auto flex items-center justify-center text-ink-muted">
-            <FileText className="w-6 h-6" />
-          </div>
-          <h3 className="font-semibold text-base text-ink">Nenhum pedido encontrado</h3>
-          <p className="text-xs text-ink-muted max-w-sm mx-auto">
-            {filterQuery 
-              ? 'Nenhum resultado corresponde à sua pesquisa.' 
-              : `Não identificamos compras aprovadas vinculadas a ${customerUser.email}. Conclua uma compra no carrinho para liberar seus arquivos instantaneamente.`}
-          </p>
-          <Link
-            to="/"
-            className="inline-block mt-2 h-9 px-4 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-pressed transition-colors leading-9 shadow-sm"
-          >
-            Explorar Loja
-          </Link>
-        </div>
+        <section className="rounded-2xl border border-borderSoft bg-surface p-10 text-center"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-warm text-ink-muted"><FileText className="h-6 w-6" aria-hidden="true" /></div><h3 className="font-semibold text-ink">Nenhum pedido encontrado</h3><p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">{filterQuery ? 'Tente buscar por outro termo.' : 'Quando você concluir uma compra, o pedido aparecerá aqui automaticamente.'}</p></section>
       ) : (
-        <div className="space-y-6">
-          {filteredOrders.map((order) => {
+        <div className="space-y-5">
+          {filteredOrders.map(order => {
             const isPaid = order.status === 'paid';
-
             return (
-              <div 
-                key={order.id} 
-                className="bg-surface rounded-xl border border-borderSoft shadow-xs overflow-hidden"
-              >
-                {/* Order Top Bar */}
-                <div className="p-4 sm:p-5 bg-surface-warm border-b border-borderSoft flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono font-bold text-ink">{order.id}</span>
-                    <span className="text-ink-muted">•</span>
-                    <span className="text-ink-muted flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {new Date(order.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <span className="text-ink-muted">Total: <strong>R$ {order.total.toFixed(2)}</strong></span>
-                    {isPaid ? (
-                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" /> Pago & Liberado
-                      </span>
-                    ) : (
-                      <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> Aguardando Pagamento
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Items in this order */}
+              <article key={order.id} className="overflow-hidden rounded-2xl border border-borderSoft bg-surface shadow-xs">
+                <header className="flex flex-col gap-3 border-b border-borderSoft bg-surface-warm p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                  <div className="flex flex-wrap items-center gap-2 text-xs"><span className="font-mono font-bold text-ink">{order.id}</span><span className="text-ink-faint">•</span><span className="flex items-center gap-1 text-ink-muted"><Calendar className="h-3.5 w-3.5" aria-hidden="true" /> {new Date(order.createdAt).toLocaleDateString('pt-BR')}</span></div>
+                  <div className="flex flex-wrap items-center gap-3 text-xs"><span className="text-ink-muted">Total: <strong className="text-ink">{order.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span><span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{isPaid ? <CheckCircle className="h-3 w-3" aria-hidden="true" /> : <Clock className="h-3 w-3" aria-hidden="true" />}{isPaid ? 'Pago e liberado' : 'Aguardando pagamento'}</span></div>
+                </header>
                 <div className="divide-y divide-borderSoft">
-                  {order.items.map((item, idx) => (
-                    <div key={idx} className="p-4 sm:p-5 space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-start gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-surface-warm border border-borderSoft flex items-center justify-center text-primary shrink-0 mt-0.5">
-                            <FileText className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="font-bold text-ink text-sm">
-                                {item.productTitle}
-                              </h4>
-                              {getItemTypeBadge(item.productType)}
-                            </div>
-                            <p className="text-[11px] text-ink-muted font-mono mt-0.5">
-                              {item.zipFileName || item.downloadFileName}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Botão de Download ou Aviso de Pagamento Pendente */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          {isPaid ? (
-                            <button
-                              onClick={() => downloadFile(item.productTitle, item.zipFileName || item.downloadFileName, item.format)}
-                              className="h-8 px-4 rounded-lg bg-primary hover:bg-primary-pressed text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm active:scale-95"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                              <span>Baixar {item.zipFileName ? '.ZIP' : 'Arquivo'}</span>
-                            </button>
-                          ) : (
-                            <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-md font-medium flex items-center gap-1">
-                              <Clock className="w-3 h-3" /> Disponível após pagamento
-                            </span>
-                          )}
-                        </div>
+                  {order.items.map((item, index) => (
+                    <div key={`${item.productId}-${index}`} className="space-y-4 p-4 sm:p-5">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-borderSoft bg-surface-warm text-primary"><FileText className="h-4 w-4" aria-hidden="true" /></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h4 className="font-bold text-ink">{item.productTitle}</h4>{getItemTypeBadge(item.productType)}</div>{isPaid && (item.zipFileName || item.downloadFileName) && <p className="mt-1 break-all font-mono text-[11px] text-ink-muted">{item.zipFileName || item.downloadFileName}</p>}</div></div>
+                        {isPaid ? <button type="button" onClick={() => downloadFile(item.productTitle, item.zipFileName || item.downloadFileName, item.format)} className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-xs font-semibold text-white transition-colors hover:bg-primary-pressed focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"><Download className="h-4 w-4" aria-hidden="true" /> Baixar arquivo</button> : <span className="inline-flex min-h-11 items-center gap-1.5 self-start rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-800"><Clock className="h-3.5 w-3.5" aria-hidden="true" /> Liberação após pagamento</span>}
                       </div>
-
-                      {/* Logins e Credenciais de Acesso (Apenas se pago) */}
                       {isPaid && (item.accessLogins || item.proxyDetails) && (
-                        <div className="bg-surface-warm p-3.5 rounded-lg border border-borderSoft space-y-2 mt-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-ink flex items-center gap-1.5">
-                              <Key className="w-3.5 h-3.5 text-primary" />
-                              Credenciais & Acessos Liberados:
-                            </span>
-                            <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-100 px-2 py-0.2 rounded-full">
-                              Pronta Entrega
-                            </span>
-                          </div>
-
-                          {item.accessLogins && (
-                            <div className="text-xs font-mono bg-white p-2.5 rounded border border-borderSoft flex items-center justify-between gap-2">
-                              <div className="truncate text-ink">
-                                <span className="text-ink-muted select-none">Logins: </span>
-                                {item.accessLogins}
-                              </div>
-                              <button
-                                onClick={() => handleCopy(item.accessLogins || '', `login-${idx}`)}
-                                className="px-2 py-1 bg-surface-warm hover:bg-black/[0.05] border border-borderSoft rounded text-[10px] font-medium text-ink shrink-0 flex items-center gap-1 cursor-pointer"
-                              >
-                                {copiedKey === `login-${idx}` ? (
-                                  <>
-                                    <CheckCircle className="w-3 h-3 text-emerald-600" />
-                                    <span>Copiado!</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="w-3 h-3" />
-                                    <span>Copiar</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          )}
-
-                          {item.proxyDetails && (
-                            <div className="text-xs font-mono bg-white p-2.5 rounded border border-borderSoft flex items-center justify-between gap-2">
-                              <div className="truncate text-ink">
-                                <span className="text-ink-muted select-none">Proxy: </span>
-                                {item.proxyDetails}
-                              </div>
-                              <button
-                                onClick={() => handleCopy(item.proxyDetails || '', `proxy-${idx}`)}
-                                className="px-2 py-1 bg-surface-warm hover:bg-black/[0.05] border border-borderSoft rounded text-[10px] font-medium text-ink shrink-0 flex items-center gap-1 cursor-pointer"
-                              >
-                                {copiedKey === `proxy-${idx}` ? (
-                                  <>
-                                    <CheckCircle className="w-3 h-3 text-emerald-600" />
-                                    <span>Copiado!</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="w-3 h-3" />
-                                    <span>Copiar</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          )}
+                        <div className="space-y-2 rounded-xl border border-borderSoft bg-surface-warm p-3.5">
+                          <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink"><Key className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> Credenciais liberadas</p>
+                          {[['Acesso', item.accessLogins], ['Proxy', item.proxyDetails]].filter(([, value]) => value).map(([label, value]) => {
+                            const copyId = `${label}-${order.id}-${index}`;
+                            return <div key={label} className="flex items-center justify-between gap-2 rounded-lg border border-borderSoft bg-white p-2.5 font-mono text-xs"><p className="min-w-0 break-all text-ink"><span className="text-ink-muted">{label}: </span>{value}</p><button type="button" onClick={() => void handleCopy(value || '', copyId)} aria-label={`Copiar ${label.toLowerCase()}`} className="flex min-h-9 shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-borderSoft px-2 text-[10px] font-semibold text-ink hover:bg-surface-warm">{copiedKey === copyId ? <CheckCircle className="h-3 w-3 text-emerald-600" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}{copiedKey === copyId ? 'Copiado' : 'Copiar'}</button></div>;
+                          })}
                         </div>
                       )}
-
-
-
                     </div>
                   ))}
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>
       )}
-
-    </div>
+    </main>
   );
 };

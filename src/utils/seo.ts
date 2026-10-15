@@ -205,9 +205,9 @@ export const generateSitemapXml = (
   xml += `    <priority>1.0</priority>\n`;
   xml += `  </url>\n`;
 
-  // 2. Downloads / Biblioteca
+  // 2. Área do cliente
   xml += `  <url>\n`;
-  xml += `    <loc>${baseUrl}/downloads</loc>\n`;
+  xml += `    <loc>${baseUrl}/conta</loc>\n`;
   xml += `    <lastmod>${currentDate}</lastmod>\n`;
   xml += `    <changefreq>weekly</changefreq>\n`;
   xml += `    <priority>0.8</priority>\n`;

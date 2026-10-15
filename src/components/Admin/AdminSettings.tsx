@@ -12,7 +12,6 @@ export const AdminSettings: React.FC = () => {
   const [supportWhatsapp, setSupportWhatsapp] = useState(settings.supportWhatsapp);
   const [pixKey, setPixKey] = useState(settings.pixKey);
   const [currency, setCurrency] = useState(settings.currency);
-  const [allowGuestCheckout, setAllowGuestCheckout] = useState(settings.allowGuestCheckout);
   const [notifyOnSale, setNotifyOnSale] = useState(settings.notifyOnSale);
 
   useEffect(() => {
@@ -22,7 +21,6 @@ export const AdminSettings: React.FC = () => {
     setSupportWhatsapp(settings.supportWhatsapp);
     setPixKey(settings.pixKey);
     setCurrency(settings.currency);
-    setAllowGuestCheckout(settings.allowGuestCheckout);
     setNotifyOnSale(settings.notifyOnSale);
   }, [settings]);
 
@@ -35,7 +33,7 @@ export const AdminSettings: React.FC = () => {
       supportWhatsapp,
       pixKey,
       currency,
-      allowGuestCheckout,
+      allowGuestCheckout: false,
       notifyOnSale,
     });
   };
@@ -129,15 +127,13 @@ export const AdminSettings: React.FC = () => {
         </div>
 
         <div className="pt-2 border-t border-borderSoft space-y-3">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={allowGuestCheckout}
-              onChange={(e) => setAllowGuestCheckout(e.target.checked)}
-              className="rounded text-primary"
-            />
-            <span className="font-medium text-ink">Permitir checkout direto sem exigência prévia de senha</span>
-          </label>
+          <div className="flex items-start gap-2 rounded-sm border border-primary/20 bg-primary-tint p-3 text-primary-pressed">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-semibold">Conta verificada obrigatória</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed">Todo comprador precisa validar o e-mail antes de avançar para o pagamento.</p>
+            </div>
+          </div>
 
           <label className="flex items-center gap-2 cursor-pointer">
             <input

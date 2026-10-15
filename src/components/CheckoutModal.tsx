@@ -172,11 +172,11 @@ export const CheckoutModal: React.FC = () => {
                 onClick={() => {
                   setIsCheckoutOpen(false);
                   setCompletedOrder(null);
-                  navigate('/downloads');
+                  navigate('/conta');
                 }}
                 className="w-full sm:w-auto h-10 px-4 rounded-sm bg-ink text-white text-xs font-semibold hover:bg-black/80 transition-colors flex items-center justify-center gap-2"
               >
-                <span>Acessar "Meus Downloads"</span>
+                <span>Acessar Minha Conta</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </button>
 

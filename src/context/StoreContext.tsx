@@ -5,7 +5,7 @@ import {
   Order, PaymentMethod, ProductType, StoreSettings,
 } from '../types';
 
-export interface CustomerUser { email: string; name?: string; document?: string }
+export interface CustomerUser { id: string; email: string; name?: string; document?: string }
 type Result = { success: boolean; message: string };
 type NewProduct = Omit<DigitalProduct, 'id' | 'createdAt' | 'updatedAt' | 'downloadsCount'>;
 
@@ -14,7 +14,10 @@ interface StoreContextType {
   isCartOpen: boolean; setIsCartOpen: (value: boolean) => void;
   isCheckoutOpen: boolean; setIsCheckoutOpen: (value: boolean) => void;
   customerUser: CustomerUser | null;
-  customerLogin: (email: string, token: string) => Promise<Result>; customerLogout: () => void;
+  requestCustomerCode: (email: string) => Promise<Result>;
+  verifyCustomerCode: (email: string, token: string) => Promise<Result>;
+  refreshCustomerOrders: () => Promise<void>;
+  customerLogout: () => Promise<void>;
   isAdminAuthenticated: boolean;
   adminLogin: (email: string, password: string) => Promise<Result>; adminLogout: () => Promise<void>;
   products: DigitalProduct[];
@@ -50,7 +53,7 @@ interface StoreContextType {
 
 const DEFAULT_SETTINGS: StoreSettings = {
   storeName: 'GlobalDOCS', storeTagline: '', contactEmail: 'saidlabsglobal@gmail.com',
-  supportWhatsapp: '', pixKey: '', currency: 'BRL (R$)', allowGuestCheckout: true, notifyOnSale: true,
+  supportWhatsapp: '', pixKey: '', currency: 'BRL (R$)', allowGuestCheckout: false, notifyOnSale: true,
 };
 const DELIVERABLE_FIELDS = ['downloadFileName', 'zipFileName', 'accessLogins', 'proxyDetails', 'accessInstructions'] as const;
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -215,22 +218,57 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const { data, error } = await supabase.from('admin_users').select('user_id').eq('user_id', userId).maybeSingle();
     const valid = !error && Boolean(data);
     setIsAdminAuthenticated(valid);
-    if (valid) void loadAdminData();
-    else void loadStoreData();
     return valid;
+  };
+
+  const loadCustomerData = async (): Promise<CustomerUser | null> => {
+    const { data: profile, error: profileError } = await supabase.rpc('claim_customer_orders');
+    if (profileError || !profile) {
+      setCustomerUser(null);
+      setOrders([]);
+      return null;
+    }
+
+    const { data: customerOrders, error: ordersError } = await supabase.rpc('get_my_orders');
+    if (ordersError) {
+      setOrders([]);
+      showToast('Sua conta foi acessada, mas os pedidos não puderam ser carregados.', 'error');
+    } else {
+      setOrders((customerOrders || []).map(orderFromRow));
+    }
+
+    const user: CustomerUser = {
+      id: String(profile.id),
+      email: String(profile.email),
+      name: profile.name || undefined,
+      document: profile.document || undefined,
+    };
+    setCustomerUser(user);
+    return user;
+  };
+
+  const hydrateSession = async (userId: string) => {
+    if (await validateAdmin(userId)) {
+      setCustomerUser(null);
+      await loadAdminData();
+      return;
+    }
+    await Promise.all([loadStoreData(), loadCustomerData()]);
   };
 
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'INITIAL_SESSION') {
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
         window.setTimeout(() => {
-          if (session?.user.id) void validateAdmin(session.user.id);
+          if (session?.user.id) void hydrateSession(session.user.id);
           else void loadStoreData();
         }, 0);
       } else if (event === 'SIGNED_OUT') {
         setIsAdminAuthenticated(false);
+        setCustomerUser(null);
         setOrders([]);
         setCoupons([]);
+        void loadStoreData();
       }
     });
     return () => listener.subscription.unsubscribe();
@@ -242,6 +280,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (data.user) await supabase.auth.signOut();
       return { success: false, message: 'E-mail ou senha inválidos, ou usuário sem permissão administrativa.' };
     }
+    await loadAdminData();
     showToast('Acesso administrativo autenticado.');
     return { success: true, message: 'Autenticado com sucesso.' };
   };
@@ -250,15 +289,46 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await loadStoreData(); showToast('Sessão administrativa encerrada.', 'info');
   };
 
-  const customerLogin = async (email: string, token: string): Promise<Result> => {
-    if (!email.trim() || !token.trim()) return { success: false, message: 'Informe o e-mail e o token do pedido.' };
-    const { data, error } = await supabase.rpc('get_customer_orders', { p_email: email.trim(), p_download_token: token.trim() });
-    if (error || !data?.length) return { success: false, message: 'Pedido pago não encontrado para esse e-mail e token.' };
-    const customerOrders = data.map(orderFromRow); setOrders(customerOrders);
-    setCustomerUser({ email: customerOrders[0].customerEmail, name: customerOrders[0].customerName, document: customerOrders[0].customerDocument });
-    return { success: true, message: 'Pedidos carregados com segurança.' };
+  const requestCustomerCode = async (email: string): Promise<Result> => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return { success: false, message: 'Informe um e-mail válido.' };
+    const { error } = await supabase.auth.signInWithOtp({
+      email: normalizedEmail,
+      options: { shouldCreateUser: true },
+    });
+    if (error) {
+      const limited = /rate|seconds|limit/i.test(error.message);
+      return {
+        success: false,
+        message: limited
+          ? 'Aguarde um minuto antes de solicitar um novo código.'
+          : 'Não foi possível enviar o código. Confira o e-mail e tente novamente.',
+      };
+    }
+    return { success: true, message: 'Código enviado. Verifique sua caixa de entrada.' };
   };
-  const customerLogout = () => { setCustomerUser(null); setOrders([]); showToast('Sessão encerrada.', 'info'); };
+
+  const verifyCustomerCode = async (email: string, token: string): Promise<Result> => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedToken = token.replace(/\s/g, '');
+    if (!normalizedEmail || !normalizedToken) return { success: false, message: 'Informe o e-mail e o código recebido.' };
+    const { data, error } = await supabase.auth.verifyOtp({ email: normalizedEmail, token: normalizedToken, type: 'email' });
+    if (error || !data.user) {
+      return { success: false, message: 'Código inválido ou expirado. Solicite um novo código e tente novamente.' };
+    }
+    const user = await loadCustomerData();
+    if (!user) return { success: false, message: 'A conta foi validada, mas não foi possível carregar seu perfil.' };
+    showToast('Conta acessada com segurança.');
+    return { success: true, message: 'Conta acessada com sucesso.' };
+  };
+
+  const refreshCustomerOrders = async () => { if (customerUser) await loadCustomerData(); };
+  const customerLogout = async () => {
+    await supabase.auth.signOut();
+    setCustomerUser(null);
+    setOrders([]);
+    showToast('Sessão encerrada.', 'info');
+  };
 
   const addProduct = async (product: NewProduct) => {
     const { publicData, deliverable } = splitProduct({ ...product, downloadsCount: 0 });
@@ -337,7 +407,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
     if (error || !data) { showToast(error?.message || 'Não foi possível criar o pedido.', 'error'); return null; }
     const order = orderFromRow(data); setOrders(previous => [order, ...previous]);
-    setCustomerUser({ email: order.customerEmail, name: order.customerName, document: order.customerDocument });
+    setCustomerUser(previous => previous ? {
+      ...previous,
+      name: order.customerName,
+      document: order.customerDocument,
+    } : previous);
     if (value.paymentMethod !== 'crypto') {
       clearCart();
       setIsCheckoutOpen(false);
@@ -370,7 +444,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return <StoreContext.Provider value={{
     selectedProduct, setSelectedProduct, isCartOpen, setIsCartOpen, isCheckoutOpen, setIsCheckoutOpen,
-    customerUser, customerLogin, customerLogout, isAdminAuthenticated, adminLogin, adminLogout,
+    customerUser, requestCustomerCode, verifyCustomerCode, refreshCustomerOrders, customerLogout,
+    isAdminAuthenticated, adminLogin, adminLogout,
     products, addProduct, updateProduct, deleteProduct, toggleProductStatus,
     collections, addCollection, updateCollection, deleteCollection,
     searchQuery, setSearchQuery, selectedCategory, setSelectedCategory, selectedProductType, setSelectedProductType,

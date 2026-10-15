@@ -69,6 +69,7 @@ export const CartDrawer: React.FC = () => {
     downloadFile,
     settings,
     showToast,
+    customerUser,
   } = useStore();
 
   const navigate = useNavigate();
@@ -121,12 +122,25 @@ export const CartDrawer: React.FC = () => {
   // Quando isCheckoutOpen for ativado externamente, avançar direto para a fase de checkout
   useEffect(() => {
     if (isCheckoutOpen) {
+      if (!customerUser) {
+        setIsCheckoutOpen(false);
+        setIsCartOpen(false);
+        navigate('/conta?return=checkout');
+        return;
+      }
       if (cart.length > 0) {
         setPhase('customer');
       }
       setIsCartOpen(true);
     }
-  }, [isCheckoutOpen]);
+  }, [isCheckoutOpen, customerUser, cart.length, navigate, setIsCartOpen, setIsCheckoutOpen]);
+
+  useEffect(() => {
+    if (!customerUser) return;
+    setEmail(customerUser.email);
+    if (customerUser.name) setName(customerUser.name);
+    if (customerUser.document) setDocument(customerUser.document);
+  }, [customerUser]);
 
   useEffect(() => {
     if (!isCartOpen) return;
@@ -257,6 +271,14 @@ export const CartDrawer: React.FC = () => {
   // Avançar da Fase 1 (Carrinho) para Fase 2 (Identificação)
   const handleGoToCustomerPhase = () => {
     if (cart.length === 0) return;
+    if (!customerUser) {
+      setIsCartOpen(false);
+      setIsCheckoutOpen(false);
+      navigate('/conta?return=checkout');
+      showToast('Crie ou acesse sua conta para continuar a compra.', 'info');
+      return;
+    }
+    setEmail(customerUser.email);
     setPhase('customer');
   };
 
@@ -729,12 +751,13 @@ export const CartDrawer: React.FC = () => {
                     type="email"
                     required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    readOnly
+                    aria-readonly="true"
                     placeholder="seuemail@exemplo.com"
-                    className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-black focus:outline-none transition-colors"
+                    className="w-full px-3.5 py-2.5 text-sm bg-gray-100 border border-gray-200 rounded-xl text-gray-700 cursor-not-allowed focus:outline-none"
                   />
                   <p className="text-[11px] text-gray-500 mt-1">
-                    Os links e credenciais serão enviados instantaneamente para este e-mail.
+                    E-mail verificado da sua conta. Os links e credenciais serão vinculados a ele.
                   </p>
                 </div>
 
@@ -1281,11 +1304,11 @@ export const CartDrawer: React.FC = () => {
                 <button
                   onClick={() => {
                     handleClose();
-                    navigate('/downloads');
+                    navigate('/conta');
                   }}
                   className="w-full bg-black hover:bg-neutral-900 text-white rounded-xl h-[48px] flex items-center justify-center gap-2 font-medium text-sm transition-all cursor-pointer"
                 >
-                  <span>Ir para Meus Downloads</span>
+                  <span>Ir para Minha Conta</span>
                   <ExternalLink className="w-4 h-4" />
                 </button>
 
