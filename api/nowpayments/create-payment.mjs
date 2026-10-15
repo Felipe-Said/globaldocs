@@ -9,10 +9,18 @@ import {
 } from '../../server/nowpayments.mjs';
 
 const callbackUrl = request => {
-  const configured = process.env.SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
-  if (configured) return `${configured.startsWith('http') ? configured : `https://${configured}`}/api/nowpayments/ipn`;
-  const host = request.headers['x-forwarded-host'] || request.headers.host;
-  return `https://${host}/api/nowpayments/ipn`;
+  const publicOrigin = 'https://globaldocs.vercel.app';
+  const configured = String(process.env.SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || '').trim();
+  const forwardedHost = String(request.headers['x-forwarded-host'] || request.headers.host || '').split(',')[0].trim();
+  const candidate = configured || (forwardedHost ? `https://${forwardedHost}` : publicOrigin);
+
+  try {
+    const normalized = new URL(candidate.startsWith('http') ? candidate : `https://${candidate}`);
+    if (normalized.protocol !== 'https:') return `${publicOrigin}/api/nowpayments/ipn`;
+    return new URL('/api/nowpayments/ipn', normalized.origin).href;
+  } catch {
+    return `${publicOrigin}/api/nowpayments/ipn`;
+  }
 };
 
 export default async function handler(request, response) {
@@ -92,6 +100,10 @@ export default async function handler(request, response) {
 
     return json(response, 201, publicPayment(saved));
   } catch (error) {
+    console.error('[crypto:create-payment]', {
+      status: error.status || 500,
+      message: error.message || 'unknown error',
+    });
     const publicMessage = error.status === 403
       ? 'A forma de pagamento em USDT está temporariamente indisponível.'
       : 'Não foi possível gerar a cobrança em USDT. Verifique o valor mínimo e tente novamente.';
