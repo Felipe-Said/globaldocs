@@ -316,6 +316,26 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     let signIn = await supabase.auth.signInWithPassword({ email: normalizedEmail, password: normalizedPassword });
 
+    // A still-unused code sent by the previous version can be confirmed here
+    // once and immediately promoted to the permanent password.
+    if (signIn.error && /^\d{6,10}$/.test(normalizedPassword)) {
+      const otp = await supabase.auth.verifyOtp({
+        email: normalizedEmail,
+        token: normalizedPassword,
+        type: 'email',
+      });
+      if (!otp.error && otp.data.user) {
+        const { error: passwordError } = await supabase.auth.updateUser({ password: normalizedPassword });
+        if (!passwordError) {
+          const user = await loadCustomerData();
+          if (user) {
+            showToast('Conta acessada com segurança.');
+            return { success: true, message: 'Conta acessada com sucesso.' };
+          }
+        }
+      }
+    }
+
     // Tokens delivered with purchases before customer accounts existed are
     // converted once, on the server, into the permanent account password.
     if (signIn.error && normalizedPassword.startsWith('tk_')) {
