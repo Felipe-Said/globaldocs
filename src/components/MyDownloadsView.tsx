@@ -10,14 +10,16 @@ import { useStore } from '../context/StoreContext';
 import { MonkeyLoginAvatar } from './MonkeyLoginAvatar';
 
 type AccessStep = 'email' | 'code';
+type AccessMode = 'login' | 'register';
 
 export const MyDownloadsView: React.FC = () => {
   const {
-    orders, downloadFile, customerUser, requestCustomerCode, verifyCustomerCode,
+    orders, downloadFile, customerUser, customerLogin, requestCustomerCode, verifyCustomerCode,
     refreshCustomerOrders, customerLogout, setIsCheckoutOpen,
   } = useStore();
   const location = useLocation();
   const navigate = useNavigate();
+  const [mode, setMode] = useState<AccessMode>('login');
   const [step, setStep] = useState<AccessStep>('email');
   const [emailInput, setEmailInput] = useState('');
   const [codeInput, setCodeInput] = useState('');
@@ -55,6 +57,26 @@ export const MyDownloadsView: React.FC = () => {
     await sendCode();
   };
 
+  const finishAuthentication = () => {
+    if (shouldReturnToCheckout) {
+      navigate('/', { replace: true });
+      window.setTimeout(() => setIsCheckoutOpen(true), 0);
+    }
+  };
+
+  const handleLoginSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setFeedback(null);
+    setIsLoading(true);
+    const result = await customerLogin(emailInput, codeInput);
+    setIsLoading(false);
+    if (!result.success) {
+      setFeedback({ type: 'error', message: result.message });
+      return;
+    }
+    finishAuthentication();
+  };
+
   const handleCodeSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setFeedback(null);
@@ -65,10 +87,15 @@ export const MyDownloadsView: React.FC = () => {
       setFeedback({ type: 'error', message: result.message });
       return;
     }
-    if (shouldReturnToCheckout) {
-      navigate('/', { replace: true });
-      window.setTimeout(() => setIsCheckoutOpen(true), 0);
-    }
+    finishAuthentication();
+  };
+
+  const changeMode = (nextMode: AccessMode) => {
+    setMode(nextMode);
+    setStep('email');
+    setCodeInput('');
+    setShowCode(false);
+    setFeedback(null);
   };
 
   const handleCopy = async (text: string, id: string) => {
@@ -98,14 +125,23 @@ export const MyDownloadsView: React.FC = () => {
       <section className="bg-surface-warm px-4 py-12 sm:py-20">
         <div className="mx-auto w-full max-w-[380px] animate-fadeIn rounded-2xl border border-borderSoft bg-surface p-6 shadow-notion-modal sm:p-8">
           <div className="mb-7 text-center">
-            <MonkeyLoginAvatar covered={step === 'code' && !showCode} active={fieldFocused} />
+            <MonkeyLoginAvatar covered={!showCode && (mode === 'login' || step === 'code')} active={fieldFocused} />
             <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Área do cliente</p>
-            <h1 className="text-2xl font-bold tracking-tight text-ink">{step === 'email' ? 'Criar ou acessar conta' : 'Digite o código recebido'}</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-ink">
+              {mode === 'login' ? 'Acessar minha conta' : step === 'email' ? 'Criar minha conta' : 'Digite a senha recebida'}
+            </h1>
             <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-              {step === 'email'
-                ? 'Informe seu e-mail. Enviaremos um código único para entrar com segurança.'
-                : <>Enviamos um código temporário para <strong className="font-semibold text-ink">{emailInput}</strong>.</>}
+              {mode === 'login'
+                ? 'Use o e-mail cadastrado e a senha/token que você recebeu.'
+                : step === 'email'
+                  ? 'Informe seu e-mail para receber sua senha de acesso.'
+                  : <>Enviamos sua senha para <strong className="font-semibold text-ink">{emailInput}</strong>. Ela continuará válida nos próximos acessos.</>}
             </p>
+          </div>
+
+          <div className="mb-5 grid grid-cols-2 rounded-xl bg-surface-warm p-1" role="tablist" aria-label="Tipo de acesso">
+            <button type="button" role="tab" aria-selected={mode === 'login'} onClick={() => changeMode('login')} className={`min-h-10 cursor-pointer rounded-lg px-3 text-xs font-semibold transition-colors ${mode === 'login' ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'}`}>Já tenho conta</button>
+            <button type="button" role="tab" aria-selected={mode === 'register'} onClick={() => changeMode('register')} className={`min-h-10 cursor-pointer rounded-lg px-3 text-xs font-semibold transition-colors ${mode === 'register' ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'}`}>Criar conta</button>
           </div>
 
           {feedback && (
@@ -115,7 +151,31 @@ export const MyDownloadsView: React.FC = () => {
             </div>
           )}
 
-          {step === 'email' ? (
+          {mode === 'login' ? (
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="customer-login-email" className="mb-2 block text-xs font-semibold text-ink">Seu e-mail</label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
+                  <input id="customer-login-email" type="email" autoComplete="email" inputMode="email" required value={emailInput} onFocus={() => setFieldFocused(true)} onBlur={() => setFieldFocused(false)} onChange={event => setEmailInput(event.target.value)} placeholder="voce@exemplo.com" className="min-h-12 w-full rounded-xl border border-borderSoft bg-surface-warm py-3 pl-10 pr-3 text-base text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15" />
+                </div>
+              </div>
+              <div>
+                <label htmlFor="customer-password" className="mb-2 block text-xs font-semibold text-ink">Senha ou token de acesso</label>
+                <div className="relative">
+                  <Key className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
+                  <input id="customer-password" type={showCode ? 'text' : 'password'} autoComplete="current-password" required value={codeInput} onFocus={() => setFieldFocused(true)} onBlur={() => setFieldFocused(false)} onChange={event => setCodeInput(event.target.value.replace(/\s/g, ''))} placeholder="Cole sua senha/token" className="min-h-12 w-full rounded-xl border border-borderSoft bg-surface-warm py-3 pl-10 pr-12 text-base tracking-[0.12em] text-ink outline-none transition-colors placeholder:tracking-normal placeholder:text-ink-faint focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15" />
+                  <button type="button" onClick={() => setShowCode(value => !value)} aria-label={showCode ? 'Ocultar senha' : 'Mostrar senha'} aria-pressed={showCode} className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-ink-muted hover:bg-black/[0.05] hover:text-ink focus:outline-none focus:ring-2 focus:ring-primary">
+                    {showCode ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                  </button>
+                </div>
+              </div>
+              <button type="submit" disabled={isLoading} className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-pressed focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                {isLoading ? <><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Entrando...</> : <>Entrar na minha conta <ArrowRight className="h-4 w-4" aria-hidden="true" /></>}
+              </button>
+              <button type="button" onClick={() => changeMode('register')} className="min-h-11 w-full cursor-pointer text-xs font-semibold text-primary hover:underline">Criar conta ou receber uma nova senha</button>
+            </form>
+          ) : step === 'email' ? (
             <form onSubmit={handleEmailSubmit} className="space-y-5">
               <div>
                 <label htmlFor="customer-email" className="mb-2 block text-xs font-semibold text-ink">Seu e-mail</label>
@@ -126,33 +186,33 @@ export const MyDownloadsView: React.FC = () => {
                 <p className="mt-2 text-[11px] leading-relaxed text-ink-muted">Esse e-mail será usado para seus pedidos, arquivos e acessos.</p>
               </div>
               <button type="submit" disabled={isLoading} className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-pressed focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                {isLoading ? <><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Enviando código...</> : <>Enviar código de acesso <ArrowRight className="h-4 w-4" aria-hidden="true" /></>}
+                {isLoading ? <><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Enviando senha...</> : <>Enviar senha de acesso <ArrowRight className="h-4 w-4" aria-hidden="true" /></>}
               </button>
             </form>
           ) : (
             <form onSubmit={handleCodeSubmit} className="space-y-5">
               <div>
-                <label htmlFor="customer-code" className="mb-2 block text-xs font-semibold text-ink">Código de acesso</label>
+                <label htmlFor="customer-code" className="mb-2 block text-xs font-semibold text-ink">Senha recebida por e-mail</label>
                 <div className="relative">
                   <Key className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
-                  <input id="customer-code" type={showCode ? 'text' : 'password'} autoComplete="one-time-code" inputMode="numeric" required autoFocus value={codeInput} onFocus={() => setFieldFocused(true)} onBlur={() => setFieldFocused(false)} onChange={event => setCodeInput(event.target.value.replace(/\s/g, ''))} placeholder="Cole o código do e-mail" className="min-h-12 w-full rounded-xl border border-borderSoft bg-surface-warm py-3 pl-10 pr-12 text-base tracking-[0.18em] text-ink outline-none transition-colors placeholder:tracking-normal placeholder:text-ink-faint focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15" />
+                  <input id="customer-code" type={showCode ? 'text' : 'password'} autoComplete="one-time-code" inputMode="numeric" required autoFocus value={codeInput} onFocus={() => setFieldFocused(true)} onBlur={() => setFieldFocused(false)} onChange={event => setCodeInput(event.target.value.replace(/\s/g, ''))} placeholder="Cole a senha do e-mail" className="min-h-12 w-full rounded-xl border border-borderSoft bg-surface-warm py-3 pl-10 pr-12 text-base tracking-[0.18em] text-ink outline-none transition-colors placeholder:tracking-normal placeholder:text-ink-faint focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15" />
                   <button type="button" onClick={() => setShowCode(value => !value)} aria-label={showCode ? 'Ocultar código' : 'Mostrar código'} aria-pressed={showCode} className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-ink-muted hover:bg-black/[0.05] hover:text-ink focus:outline-none focus:ring-2 focus:ring-primary">
                     {showCode ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
                   </button>
                 </div>
               </div>
               <button type="submit" disabled={isLoading} className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-pressed focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                {isLoading ? <><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Validando...</> : <>Entrar na minha conta <ArrowRight className="h-4 w-4" aria-hidden="true" /></>}
+                {isLoading ? <><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Criando conta...</> : <>Confirmar e criar conta <ArrowRight className="h-4 w-4" aria-hidden="true" /></>}
               </button>
               <div className="flex flex-col items-center gap-1 text-xs">
-                <button type="button" disabled={isLoading || resendIn > 0} onClick={() => void sendCode()} className="min-h-11 cursor-pointer px-3 font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:text-ink-faint disabled:no-underline">{resendIn > 0 ? `Reenviar código em ${resendIn}s` : 'Reenviar código'}</button>
+                <button type="button" disabled={isLoading || resendIn > 0} onClick={() => void sendCode()} className="min-h-11 cursor-pointer px-3 font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:text-ink-faint disabled:no-underline">{resendIn > 0 ? `Reenviar senha em ${resendIn}s` : 'Reenviar senha'}</button>
                 <button type="button" onClick={() => { setStep('email'); setCodeInput(''); setFeedback(null); }} className="flex min-h-11 cursor-pointer items-center gap-1 px-3 text-ink-muted hover:text-ink"><ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Usar outro e-mail</button>
               </div>
             </form>
           )}
 
           <div className="mt-6 border-t border-borderSoft pt-5 text-center">
-            <p className="flex items-center justify-center gap-1.5 text-[11px] text-ink-muted"><ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" /> Código temporário. Nenhuma senha para memorizar.</p>
+            <p className="flex items-center justify-center gap-1.5 text-[11px] text-ink-muted"><ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" /> Sua senha/token permanece válida nos próximos acessos.</p>
             <Link to="/" className="mt-3 inline-flex min-h-11 items-center text-xs font-semibold text-primary hover:underline">Voltar ao catálogo</Link>
           </div>
         </div>

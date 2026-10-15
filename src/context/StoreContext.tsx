@@ -14,6 +14,7 @@ interface StoreContextType {
   isCartOpen: boolean; setIsCartOpen: (value: boolean) => void;
   isCheckoutOpen: boolean; setIsCheckoutOpen: (value: boolean) => void;
   customerUser: CustomerUser | null;
+  customerLogin: (email: string, password: string) => Promise<Result>;
   requestCustomerCode: (email: string) => Promise<Result>;
   verifyCustomerCode: (email: string, token: string) => Promise<Result>;
   refreshCustomerOrders: () => Promise<void>;
@@ -305,7 +306,36 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           : 'Não foi possível enviar o código. Confira o e-mail e tente novamente.',
       };
     }
-    return { success: true, message: 'Código enviado. Verifique sua caixa de entrada.' };
+    return { success: true, message: 'Senha enviada. Verifique sua caixa de entrada.' };
+  };
+
+  const customerLogin = async (email: string, password: string): Promise<Result> => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+    if (!normalizedEmail || !normalizedPassword) return { success: false, message: 'Informe o e-mail e a senha/token.' };
+
+    let signIn = await supabase.auth.signInWithPassword({ email: normalizedEmail, password: normalizedPassword });
+
+    // Tokens delivered with purchases before customer accounts existed are
+    // converted once, on the server, into the permanent account password.
+    if (signIn.error && normalizedPassword.startsWith('tk_')) {
+      const response = await fetch('/api/customer/activate-legacy-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, token: normalizedPassword }),
+      });
+      if (response.ok) {
+        signIn = await supabase.auth.signInWithPassword({ email: normalizedEmail, password: normalizedPassword });
+      }
+    }
+
+    if (signIn.error || !signIn.data.user) {
+      return { success: false, message: 'E-mail ou senha/token inválidos.' };
+    }
+    const user = await loadCustomerData();
+    if (!user) return { success: false, message: 'A conta foi autenticada, mas não foi possível carregar seu perfil.' };
+    showToast('Conta acessada com segurança.');
+    return { success: true, message: 'Conta acessada com sucesso.' };
   };
 
   const verifyCustomerCode = async (email: string, token: string): Promise<Result> => {
@@ -315,6 +345,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const { data, error } = await supabase.auth.verifyOtp({ email: normalizedEmail, token: normalizedToken, type: 'email' });
     if (error || !data.user) {
       return { success: false, message: 'Código inválido ou expirado. Solicite um novo código e tente novamente.' };
+    }
+    const { error: passwordError } = await supabase.auth.updateUser({ password: normalizedToken });
+    if (passwordError) {
+      await supabase.auth.signOut();
+      return { success: false, message: 'O código foi validado, mas não foi possível defini-lo como senha. Solicite um novo código.' };
     }
     const user = await loadCustomerData();
     if (!user) return { success: false, message: 'A conta foi validada, mas não foi possível carregar seu perfil.' };
@@ -444,7 +479,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return <StoreContext.Provider value={{
     selectedProduct, setSelectedProduct, isCartOpen, setIsCartOpen, isCheckoutOpen, setIsCheckoutOpen,
-    customerUser, requestCustomerCode, verifyCustomerCode, refreshCustomerOrders, customerLogout,
+    customerUser, customerLogin, requestCustomerCode, verifyCustomerCode, refreshCustomerOrders, customerLogout,
     isAdminAuthenticated, adminLogin, adminLogout,
     products, addProduct, updateProduct, deleteProduct, toggleProductStatus,
     collections, addCollection, updateCollection, deleteCollection,

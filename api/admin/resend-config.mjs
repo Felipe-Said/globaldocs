@@ -50,17 +50,17 @@ const publicConfig = config => ({
   configured: config.smtp_host === RESEND_SMTP_HOST && config.smtp_user === 'resend' && Boolean(config.smtp_pass),
   senderEmail: config.smtp_admin_email || '',
   senderName: config.smtp_sender_name || 'GlobalDOCS',
-  otpLength: Number(config.mailer_otp_length || 6),
+  otpLength: Number(config.mailer_otp_length || 8),
   otpExpiresIn: Number(config.mailer_otp_exp || 600),
 });
 
 const otpTemplate = `
 <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px;color:#111827">
   <div style="font-size:20px;font-weight:700;margin-bottom:24px">GlobalDOCS</div>
-  <h2 style="font-size:22px;margin:0 0 12px">Seu código de acesso</h2>
-  <p style="font-size:14px;line-height:1.6;color:#4b5563">Use o código abaixo para criar ou acessar sua conta. Não compartilhe este código.</p>
+  <h2 style="font-size:22px;margin:0 0 12px">Sua senha de acesso</h2>
+  <p style="font-size:14px;line-height:1.6;color:#4b5563">Use a senha abaixo para concluir a criação da sua conta. Depois da confirmação, esta mesma senha será usada nos próximos acessos.</p>
   <div style="margin:24px 0;padding:18px;border:1px solid #e5e7eb;border-radius:12px;background:#f9fafb;text-align:center;font-size:30px;font-weight:700;letter-spacing:8px">{{ .Token }}</div>
-  <p style="font-size:12px;line-height:1.6;color:#6b7280">O código expira em 10 minutos. Se você não solicitou este acesso, ignore esta mensagem.</p>
+  <p style="font-size:12px;line-height:1.6;color:#6b7280">Confirme esta senha na plataforma em até 10 minutos. Depois de confirmada, ela continuará válida. Se você não solicitou este acesso, ignore esta mensagem.</p>
 </div>`;
 
 export default async function handler(request, response) {
@@ -119,9 +119,9 @@ export default async function handler(request, response) {
       smtp_pass: apiKey,
       smtp_sender_name: senderName,
       mailer_otp_exp: 600,
-      mailer_otp_length: 6,
-      mailer_subjects_confirmation: 'Seu código de acesso à GlobalDOCS',
-      mailer_subjects_magic_link: 'Seu código de acesso à GlobalDOCS',
+      mailer_otp_length: 8,
+      mailer_subjects_confirmation: 'Sua senha de acesso à GlobalDOCS',
+      mailer_subjects_magic_link: 'Sua senha de acesso à GlobalDOCS',
       mailer_templates_confirmation_content: otpTemplate,
       mailer_templates_magic_link_content: otpTemplate,
     };

@@ -167,7 +167,7 @@ export const AdminAPIs: React.FC = () => {
     configured: false,
     senderEmail: '',
     senderName: 'GlobalDOCS',
-    otpLength: 6,
+    otpLength: 8,
     otpExpiresIn: 600,
   });
   const [resendApiKey, setResendApiKey] = useState('');
@@ -451,7 +451,7 @@ export const AdminAPIs: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md bg-blue-50 border border-blue-100 p-3 text-[11px] text-blue-900 leading-relaxed">
                 <div className="flex items-start gap-2">
                   <MailCheck className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-                  <p>Use um remetente pertencente a um domínio já verificado na Resend. O código terá {resend.otpLength} dígitos e validade de {Math.round(resend.otpExpiresIn / 60)} minutos.</p>
+                  <p>Use um remetente pertencente a um domínio já verificado na Resend. A senha inicial terá {resend.otpLength} dígitos e deverá ser confirmada em até {Math.round(resend.otpExpiresIn / 60)} minutos; depois disso, continuará válida para os próximos acessos.</p>
                 </div>
                 <a href="https://resend.com/domains" target="_blank" rel="noreferrer" className="min-h-9 inline-flex items-center justify-center px-3 rounded-md border border-blue-200 bg-white font-semibold text-blue-900 hover:bg-blue-100 shrink-0">Ver domínios</a>
               </div>
