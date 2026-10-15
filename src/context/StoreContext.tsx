@@ -58,6 +58,8 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 const productFromRow = (row: any, deliverable?: Record<string, unknown>): DigitalProduct => ({
   ...row.data, ...(deliverable || {}), id: row.id, active: row.active, isFeatured: row.featured,
   downloadsCount: Number(row.data?.downloadsCount || 0), createdAt: row.created_at, updatedAt: row.updated_at,
+  unlimitedStock: row.data?.unlimitedStock !== false,
+  stockQuantity: Math.max(0, Number(row.data?.stockQuantity ?? 1)),
 });
 const collectionFromRow = (row: any): Collection => ({ ...row.data, id: row.id, active: row.active });
 const bannerFromRow = (row: any): Banner => ({ ...row.data, id: row.id, active: row.active, order: row.sort_order });
@@ -304,7 +306,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addToCart = (product: DigitalProduct) => setCart(value => value.some(item => item.product.id === product.id) ? value : [...value, { product, quantity: 1 }]);
   const removeFromCart = (id: string) => setCart(value => value.filter(item => item.product.id !== id));
-  const updateCartQuantity = (id: string, quantity: number) => quantity <= 0 ? removeFromCart(id) : setCart(value => value.map(item => item.product.id === id ? { ...item, quantity } : item));
+  const updateCartQuantity = (id: string, quantity: number) => quantity <= 0
+    ? removeFromCart(id)
+    : setCart(value => value.map(item => item.product.id === id
+      ? {
+          ...item,
+          quantity: item.product.unlimitedStock
+            ? quantity
+            : Math.min(quantity, Math.max(1, item.product.stockQuantity)),
+        }
+      : item));
   const clearCart = () => { setCart([]); setAppliedCoupon(null); };
   const subtotal = useMemo(() => cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0), [cart]);
   const discount = appliedCoupon ? subtotal * appliedCoupon.discountPercent / 100 : 0;
@@ -335,7 +346,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
   const updateOrderStatus = async (id: string, status: Order['status']) => {
     const { error } = await supabase.from('orders').update({ status }).eq('id', id);
-    if (error) return showToast(error.message, 'error'); setOrders(value => value.map(item => item.id === id ? { ...item, status } : item)); showToast(`Status do pedido ${id} atualizado.`);
+    if (error) return showToast(error.message, 'error');
+    if (status === 'paid') await loadAdminData();
+    else setOrders(value => value.map(item => item.id === id ? { ...item, status } : item));
+    showToast(`Status do pedido ${id} atualizado.`);
   };
 
   const addCoupon = async (coupon: Omit<Coupon, 'usageCount'>) => {

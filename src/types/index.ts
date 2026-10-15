@@ -39,6 +39,8 @@ export interface DigitalProduct {
   downloadsCount: number;
   rating: number;
   reviewsCount: number;
+  unlimitedStock: boolean;
+  stockQuantity: number;
   tags: string[];
   features: string[];
   previewUrl?: string;

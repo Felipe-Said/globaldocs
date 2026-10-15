@@ -28,7 +28,9 @@ import {
   Globe,
   FileArchive,
   Upload,
-  FileCode
+  FileCode,
+  RefreshCw,
+  Boxes
 } from 'lucide-react';
 import { slugify, downloadSitemapXml } from '../../utils/seo';
 
@@ -105,6 +107,8 @@ export const AdminProducts: React.FC = () => {
   const [slug, setSlug] = useState('');
   const [isFeatured, setIsFeatured] = useState(false);
   const [active, setActive] = useState(true);
+  const [unlimitedStock, setUnlimitedStock] = useState(false);
+  const [stockQuantity, setStockQuantity] = useState('1');
 
   const openCreateModal = () => {
     setEditingProduct(null);
@@ -138,6 +142,8 @@ export const AdminProducts: React.FC = () => {
     setSlug('');
     setIsFeatured(false);
     setActive(true);
+    setUnlimitedStock(false);
+    setStockQuantity('1');
     setIsModalOpen(true);
   };
 
@@ -173,6 +179,8 @@ export const AdminProducts: React.FC = () => {
     setSlug(product.slug || slugify(product.title));
     setIsFeatured(!!product.isFeatured);
     setActive(product.active);
+    setUnlimitedStock(product.unlimitedStock !== false);
+    setStockQuantity(String(Math.max(0, product.stockQuantity ?? 1)));
     setIsModalOpen(true);
   };
 
@@ -212,6 +220,8 @@ export const AdminProducts: React.FC = () => {
       slug: slug.trim() || slugify(title),
       isFeatured,
       active,
+      unlimitedStock,
+      stockQuantity: unlimitedStock ? Math.max(1, Number(stockQuantity) || 1) : Math.max(1, Math.floor(Number(stockQuantity) || 1)),
       rating: editingProduct ? editingProduct.rating : 5.0,
       reviewsCount: editingProduct ? editingProduct.reviewsCount : 1,
     };
@@ -358,6 +368,7 @@ export const AdminProducts: React.FC = () => {
                 <th className="py-3 px-4">Formato / Tamanho</th>
                 <th className="py-3 px-4">Preço</th>
                 <th className="py-3 px-4">Downloads/Envios</th>
+                <th className="py-3 px-4">Estoque</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Ações</th>
               </tr>
@@ -425,6 +436,19 @@ export const AdminProducts: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-ink">
                       {product.downloadsCount.toLocaleString('pt-BR')}
+                    </td>
+                    <td className="py-3 px-4">
+                      {product.unlimitedStock !== false ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800 whitespace-nowrap">
+                          <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                          Ilimitado
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-borderSoft bg-surface-warm px-2 py-1 text-[10px] font-semibold text-ink whitespace-nowrap">
+                          <Boxes className="h-3 w-3 text-ink-muted" aria-hidden="true" />
+                          {product.stockQuantity} {product.stockQuantity === 1 ? 'unidade' : 'unidades'}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <button
@@ -889,6 +913,51 @@ export const AdminProducts: React.FC = () => {
                   />
                 </div>
               </div>
+
+              <fieldset className="rounded-sm border border-borderSoft bg-surface-warm/60 p-3.5">
+                <legend className="px-1 text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+                  Controle de estoque
+                </legend>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_180px] sm:items-center">
+                  <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-sm p-1 focus-within:ring-2 focus-within:ring-primary/30">
+                    <input
+                      type="checkbox"
+                      checked={unlimitedStock}
+                      onChange={(event) => setUnlimitedStock(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded text-primary"
+                    />
+                    <span>
+                      <span className="flex items-center gap-1.5 font-semibold text-ink">
+                        <RefreshCw className="h-3.5 w-3.5 text-emerald-700" aria-hidden="true" />
+                        Venda ilimitada
+                      </span>
+                      <span className="mt-0.5 block text-[10px] leading-relaxed text-ink-muted">
+                        Marque para temas, arquivos e serviços que podem ser revendidos sem baixa de estoque.
+                      </span>
+                    </span>
+                  </label>
+
+                  {!unlimitedStock && (
+                    <div>
+                      <label htmlFor="product-stock-quantity" className="mb-1 block font-medium text-ink">
+                        Quantidade disponível
+                      </label>
+                      <input
+                        id="product-stock-quantity"
+                        type="number"
+                        min="1"
+                        step="1"
+                        required
+                        inputMode="numeric"
+                        value={stockQuantity}
+                        onChange={(event) => setStockQuantity(event.target.value)}
+                        className="w-full rounded-sm border border-borderSoft bg-white px-3 py-2 text-ink tabular-nums focus:border-primary"
+                      />
+                    </div>
+                  )}
+                </div>
+              </fieldset>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
