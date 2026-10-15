@@ -84,7 +84,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   };
 
   return (
-    <div className="bg-surface rounded-md border border-borderSoft p-5 flex flex-col justify-between hover:shadow-notion-card transition-all duration-200 group relative">
+    <div className="h-full bg-surface rounded-md border border-borderSoft p-5 flex flex-col justify-between hover:shadow-notion-card transition-all duration-200 group relative">
       <div>
         {/* Top Header: Type Pill & Countries & Rating */}
         <div className="flex items-center justify-between gap-2 mb-3">

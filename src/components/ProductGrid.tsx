@@ -10,6 +10,13 @@ import {
   Layers
 } from 'lucide-react';
 
+const homeProductRailClasses = [
+  '-mx-4 grid grid-flow-col auto-cols-[88%] gap-4 overflow-x-auto overscroll-x-contain px-4 pb-3',
+  'snap-x snap-mandatory scroll-px-4',
+  'sm:mx-0 sm:grid-flow-row sm:auto-cols-auto sm:grid-cols-2 sm:gap-5 sm:overflow-visible sm:px-0 sm:pb-0 sm:snap-none',
+  'lg:grid-cols-3 xl:grid-cols-5',
+].join(' ');
+
 export const ProductGrid: React.FC = () => {
   const { 
     products, 
@@ -215,10 +222,12 @@ export const ProductGrid: React.FC = () => {
             )}
           </div>
 
-          {/* Grid mostrando até 5 produtos da coleção */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-5">
+          {/* Trilho horizontal no mobile e grade a partir de telas médias */}
+          <div className={homeProductRailClasses} role="list" aria-label={`Produtos da coleção ${collection.name}`}>
             {items.map(product => (
-              <ProductCard key={product.id} product={product} />
+              <div key={product.id} role="listitem" className="snap-start h-full [&>*]:h-full">
+                <ProductCard product={product} />
+              </div>
             ))}
           </div>
 
@@ -258,9 +267,11 @@ export const ProductGrid: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-5">
+          <div className={homeProductRailClasses} role="list" aria-label="Outros produtos disponíveis">
             {uncategorizedDisplayed.map(product => (
-              <ProductCard key={product.id} product={product} />
+              <div key={product.id} role="listitem" className="snap-start h-full [&>*]:h-full">
+                <ProductCard product={product} />
+              </div>
             ))}
           </div>
         </div>
