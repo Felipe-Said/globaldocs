@@ -1,7 +1,9 @@
 import { json, readBody, requireAdmin } from '../../server/nowpayments.mjs';
 
 const RESEND_SMTP_HOST = 'smtp.resend.com';
-const RESEND_SMTP_PORT = 465;
+// The Supabase Management API models smtp_port as a string, even though the
+// value represents a numeric TCP port.
+const RESEND_SMTP_PORT = '465';
 
 const getProjectRef = () => {
   if (process.env.SUPABASE_PROJECT_REF) return process.env.SUPABASE_PROJECT_REF;
