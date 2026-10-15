@@ -1,12 +1,48 @@
 import React from 'react';
 import { useStore } from '../context/StoreContext';
-import { FileText, Shield, Mail } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GATEWAY_LOGOS } from '../utils/gatewayLogos';
 
+interface PaymentAvailability {
+  pix: { enabled: boolean };
+  card: { enabled: boolean };
+  crypto: { enabled: boolean };
+}
+
 export const Footer: React.FC = () => {
-  const { collections, setSelectedCategory, setSelectedCollectionId, settings } = useStore();
+  const { collections, settings } = useStore();
+  const [paymentAvailability, setPaymentAvailability] = React.useState<PaymentAvailability | null>(null);
   const activeCollections = collections.filter((collection) => collection.active);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+
+    void fetch('/api/payment-methods', {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json() as Promise<PaymentAvailability>;
+      })
+      .then((availability) => {
+        if (availability) setPaymentAvailability(availability);
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          setPaymentAvailability(null);
+        }
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  const hasActivePayments = Boolean(
+    paymentAvailability?.pix.enabled
+    || paymentAvailability?.card.enabled
+    || paymentAvailability?.crypto.enabled,
+  );
 
   return (
     <footer className="bg-surface border-t border-borderSoft mt-20 pt-16 pb-12">
@@ -106,19 +142,29 @@ export const Footer: React.FC = () => {
             <span>Garantia de Download Imediato</span>
           </div>
 
-          {/* Gateways Aceitos - Logos Oficiais Sem Bordas */}
-          <div className="flex flex-wrap items-center justify-center gap-3.5 select-none">
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-faint">Pagamentos:</span>
-            <div className="flex items-center gap-3.5 opacity-85 hover:opacity-100 transition-opacity">
-              <img src={GATEWAY_LOGOS.pix} alt="Pix" title="Pix" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />
-              <img src={GATEWAY_LOGOS.mercadopago} alt="Mercado Pago" title="Mercado Pago" className="h-4 w-auto object-contain" style={{ border: 'none' }} />
-              <img src={GATEWAY_LOGOS.stripe} alt="Stripe" title="Stripe" className="h-3 w-auto object-contain" style={{ border: 'none' }} />
-              <img src={GATEWAY_LOGOS.visa} alt="Visa" title="Visa" className="h-2.5 w-auto object-contain" style={{ border: 'none' }} />
-              <img src={GATEWAY_LOGOS.mastercard} alt="Mastercard" title="Mastercard" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />
-              <img src={GATEWAY_LOGOS.elo} alt="Elo" title="Elo" className="h-2.5 w-auto object-contain" style={{ border: 'none' }} />
-              <img src={GATEWAY_LOGOS.usdt} alt="Tether USDT" title="Tether USDT" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />
+          {hasActivePayments && (
+            <div
+              className="flex flex-wrap items-center justify-center gap-3.5 select-none"
+              aria-label="Formas de pagamento ativas"
+            >
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-faint">Pagamentos:</span>
+              <div className="flex items-center gap-3.5 opacity-85 hover:opacity-100 transition-opacity">
+                {paymentAvailability?.pix.enabled && (
+                  <img src={GATEWAY_LOGOS.pix} alt="Pix" title="Pix" className="h-3.5 w-auto object-contain border-0" />
+                )}
+                {paymentAvailability?.card.enabled && (
+                  <>
+                    <img src={GATEWAY_LOGOS.visa} alt="Visa" title="Visa" className="h-2.5 w-auto object-contain border-0" />
+                    <img src={GATEWAY_LOGOS.mastercard} alt="Mastercard" title="Mastercard" className="h-3.5 w-auto object-contain border-0" />
+                    <img src={GATEWAY_LOGOS.elo} alt="Elo" title="Elo" className="h-2.5 w-auto object-contain border-0" />
+                  </>
+                )}
+                {paymentAvailability?.crypto.enabled && (
+                  <img src={GATEWAY_LOGOS.usdt} alt="USDT" title="USDT" className="h-3.5 w-auto object-contain border-0" />
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </footer>
