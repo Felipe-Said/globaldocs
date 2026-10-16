@@ -256,6 +256,7 @@ export const MyDownloadsView: React.FC = () => {
     profile: { eyebrow: 'Conta', title: 'Meu perfil', description: 'Confira os dados usados para identificar sua conta e vincular seus pedidos.' },
   };
   const currentView = viewCopy[activeView];
+  const currentNavigationLabel = activeView === 'overview' ? 'Visão geral' : currentView.title;
 
   return (
     <div className="bg-surface-warm px-0 py-0 sm:px-4 sm:py-6 lg:px-6">
@@ -274,11 +275,11 @@ export const MyDownloadsView: React.FC = () => {
         </div>
 
         <section className="min-w-0 flex-1 bg-surface-warm/60">
-          <div className="sticky top-14 z-20 flex min-h-14 items-center justify-between border-b border-borderSoft bg-surface/95 px-3 backdrop-blur-md sm:top-16 sm:px-5">
+          <div className="relative z-10 flex min-h-14 items-center justify-between border-b border-borderSoft bg-surface px-3 sm:px-5">
             <div className="flex min-w-0 items-center gap-2.5">
               <button type="button" onClick={() => setMobileSidebarOpen(true)} aria-label="Abrir menu da conta" aria-expanded={mobileSidebarOpen} className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl text-ink-muted transition-colors hover:bg-surface-warm hover:text-ink lg:hidden"><Menu className="h-5 w-5" aria-hidden="true" /></button>
               <button type="button" onClick={() => setSidebarCollapsed(value => !value)} aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} aria-pressed={sidebarCollapsed} className="hidden h-11 w-11 cursor-pointer items-center justify-center rounded-xl text-ink-muted transition-colors hover:bg-surface-warm hover:text-ink lg:flex">{sidebarCollapsed ? <PanelLeftOpen className="h-[18px] w-[18px]" aria-hidden="true" /> : <PanelLeftClose className="h-[18px] w-[18px]" aria-hidden="true" />}</button>
-              <div className="min-w-0 text-xs text-ink-muted"><span className="hidden sm:inline">Minha conta</span><span className="hidden px-2 sm:inline">/</span><strong className="truncate font-semibold text-ink">{currentView.title}</strong></div>
+              <div className="min-w-0 text-xs text-ink-muted"><span className="hidden sm:inline">Minha conta</span><span className="hidden px-2 sm:inline">/</span><strong className="truncate font-semibold text-ink">{currentNavigationLabel}</strong></div>
             </div>
             <button type="button" onClick={() => void refreshCustomerOrders()} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-borderSoft bg-white px-3 text-xs font-semibold text-ink transition-colors hover:bg-surface-warm"><RefreshCw className="h-4 w-4" aria-hidden="true" /><span className="hidden sm:inline">Atualizar</span></button>
           </div>
