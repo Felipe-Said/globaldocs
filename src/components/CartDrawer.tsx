@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
+import { formatTaxId, isValidTaxId, normalizeCustomerName } from '../lib/customer-profile';
 import { detectBrands } from '../utils/brandDetection';
 import { detectCountries } from '../utils/countryDetection';
 import { CountryBadgesList } from './CountryBadge';
@@ -128,6 +129,13 @@ export const CartDrawer: React.FC = () => {
         navigate('/conta?return=checkout');
         return;
       }
+      if (!customerUser.name?.trim() || !customerUser.document?.trim()) {
+        setIsCheckoutOpen(false);
+        setIsCartOpen(false);
+        navigate('/conta?return=checkout');
+        showToast('Complete seu nome e CPF/CNPJ para continuar a compra.', 'info');
+        return;
+      }
       if (cart.length > 0) {
         setPhase('customer');
       }
@@ -139,7 +147,7 @@ export const CartDrawer: React.FC = () => {
     if (!customerUser) return;
     setEmail(customerUser.email);
     if (customerUser.name) setName(customerUser.name);
-    if (customerUser.document) setDocument(customerUser.document);
+    if (customerUser.document) setDocument(formatTaxId(customerUser.document));
   }, [customerUser]);
 
   useEffect(() => {
@@ -278,14 +286,30 @@ export const CartDrawer: React.FC = () => {
       showToast('Crie ou acesse sua conta para continuar a compra.', 'info');
       return;
     }
+    if (!customerUser.name?.trim() || !customerUser.document?.trim()) {
+      setIsCartOpen(false);
+      setIsCheckoutOpen(false);
+      navigate('/conta?return=checkout');
+      showToast('Complete seu nome e CPF/CNPJ para continuar a compra.', 'info');
+      return;
+    }
     setEmail(customerUser.email);
+    setName(customerUser.name);
+    setDocument(formatTaxId(customerUser.document));
     setPhase('customer');
   };
 
   // Avançar da Fase 2 (Identificação) para Fase 3 (Pagamento)
   const handleGoToPaymentPhase = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || !document.trim()) return;
+    if (normalizeCustomerName(name).length < 3) {
+      showToast('Informe seu nome completo ou razão social.', 'error');
+      return;
+    }
+    if (!isValidTaxId(document)) {
+      showToast('Informe um CPF ou CNPJ válido.', 'error');
+      return;
+    }
     setPhase('payment');
   };
 
@@ -769,7 +793,7 @@ export const CartDrawer: React.FC = () => {
                     type="text"
                     required
                     value={document}
-                    onChange={(e) => setDocument(e.target.value)}
+                    onChange={(e) => setDocument(formatTaxId(e.target.value))}
                     placeholder="000.000.000-00"
                     className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-black focus:outline-none transition-colors"
                   />

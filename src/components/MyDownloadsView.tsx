@@ -3,10 +3,11 @@ import {
   AlertCircle, ArrowLeft, ArrowRight, Building2, Calendar, CheckCircle, Clock, Copy,
   CreditCard, Download, Eye, EyeOff, FileCheck, FileText, Key, LoaderCircle,
   LockKeyhole, Mail, Menu, PackageCheck, PanelLeftClose, PanelLeftOpen, RefreshCw,
-  Search, ShieldCheck, ShoppingBag, UserRound,
+  Save, Search, ShieldCheck, ShoppingBag, UserRound,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
+import { formatTaxId } from '../lib/customer-profile';
 import { MonkeyLoginAvatar } from './MonkeyLoginAvatar';
 import { CustomerDashboardSidebar, type CustomerPanelView } from './ui/dashboard-sidebar';
 
@@ -16,7 +17,7 @@ type AccessMode = 'login' | 'register';
 export const MyDownloadsView: React.FC = () => {
   const {
     orders, downloadFile, customerUser, customerLogin, requestCustomerCode, verifyCustomerCode,
-    refreshCustomerOrders, customerLogout, setIsCheckoutOpen,
+    updateCustomerProfile, refreshCustomerOrders, customerLogout, setIsCheckoutOpen,
   } = useStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -34,7 +35,18 @@ export const MyDownloadsView: React.FC = () => {
   const [activeView, setActiveView] = useState<CustomerPanelView>('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [profileName, setProfileName] = useState('');
+  const [profileDocument, setProfileDocument] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
   const shouldReturnToCheckout = new URLSearchParams(location.search).get('return') === 'checkout';
+
+  useEffect(() => {
+    if (!customerUser) return;
+    setProfileName(customerUser.name || '');
+    setProfileDocument(formatTaxId(customerUser.document || ''));
+    if (!customerUser.name?.trim() || !customerUser.document?.trim()) setActiveView('profile');
+  }, [customerUser]);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -75,7 +87,11 @@ export const MyDownloadsView: React.FC = () => {
     await sendCode();
   };
 
-  const finishAuthentication = () => {
+  const finishAuthentication = (authenticatedCustomer = customerUser) => {
+    if (!authenticatedCustomer?.name?.trim() || !authenticatedCustomer.document?.trim()) {
+      setActiveView('profile');
+      return;
+    }
     if (shouldReturnToCheckout) {
       navigate('/', { replace: true });
       window.setTimeout(() => setIsCheckoutOpen(true), 0);
@@ -92,7 +108,7 @@ export const MyDownloadsView: React.FC = () => {
       setFeedback({ type: 'error', message: result.message });
       return;
     }
-    finishAuthentication();
+    finishAuthentication(result.customer);
   };
 
   const handleCodeSubmit = async (event: React.FormEvent) => {
@@ -105,7 +121,24 @@ export const MyDownloadsView: React.FC = () => {
       setFeedback({ type: 'error', message: result.message });
       return;
     }
-    finishAuthentication();
+    finishAuthentication(result.customer);
+  };
+
+  const handleProfileSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setProfileFeedback(null);
+    setProfileSaving(true);
+    const result = await updateCustomerProfile(profileName, profileDocument);
+    setProfileSaving(false);
+    if (!result.success) {
+      setProfileFeedback({ type: 'error', message: result.message });
+      return;
+    }
+    setProfileFeedback({ type: 'success', message: 'Dados salvos. Eles serão preenchidos automaticamente nas próximas compras.' });
+    if (shouldReturnToCheckout) {
+      navigate('/', { replace: true });
+      window.setTimeout(() => setIsCheckoutOpen(true), 0);
+    }
   };
 
   const changeMode = (nextMode: AccessMode) => {
@@ -340,8 +373,33 @@ export const MyDownloadsView: React.FC = () => {
 
             {activeView === 'profile' && (
               <div className="grid gap-5 animate-fadeIn xl:grid-cols-[minmax(0,1fr)_320px]">
-                <section className="overflow-hidden rounded-2xl border border-borderSoft bg-white shadow-xs"><div className="border-b border-borderSoft px-5 py-4"><h2 className="font-bold text-ink">Dados da conta</h2><p className="mt-1 text-xs text-ink-muted">Informações vinculadas aos seus pedidos.</p></div><dl className="divide-y divide-borderSoft"><div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr]"><dt className="text-xs font-semibold text-ink-muted">Nome</dt><dd className="text-sm font-medium text-ink">{customerUser.name || 'Não informado'}</dd></div><div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr]"><dt className="text-xs font-semibold text-ink-muted">E-mail</dt><dd className="break-all text-sm font-medium text-ink">{customerUser.email}</dd></div><div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr]"><dt className="text-xs font-semibold text-ink-muted">Documento</dt><dd className="text-sm font-medium text-ink">{customerUser.document || 'Não informado'}</dd></div><div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr]"><dt className="text-xs font-semibold text-ink-muted">Status</dt><dd><span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-800"><CheckCircle className="h-3 w-3" aria-hidden="true" /> Conta verificada</span></dd></div></dl></section>
-                <aside className="rounded-2xl border border-borderSoft bg-white p-5 shadow-xs"><div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary-tint text-primary"><LockKeyhole className="h-5 w-5" aria-hidden="true" /></div><h2 className="font-bold text-ink">Acesso protegido</h2><p className="mt-2 text-xs leading-relaxed text-ink-muted">Sua senha/token é pessoal. Não compartilhe com terceiros. Para receber uma nova, encerre a sessão e use a opção de recuperação na tela de entrada.</p><button type="button" onClick={() => void customerLogout()} className="mt-5 flex min-h-11 w-full cursor-pointer items-center justify-center rounded-xl border border-rose-200 px-4 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50">Sair da conta</button></aside>
+                <section className="overflow-hidden rounded-2xl border border-borderSoft bg-white shadow-xs">
+                  <div className="border-b border-borderSoft px-5 py-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div><h2 className="font-bold text-ink">Dados da conta</h2><p className="mt-1 text-xs text-ink-muted">Usaremos estes dados automaticamente na identificação das suas compras.</p></div>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold ${customerUser.name && customerUser.document ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}><CheckCircle className="h-3 w-3" aria-hidden="true" /> {customerUser.name && customerUser.document ? 'Cadastro completo' : 'Preenchimento obrigatório'}</span>
+                    </div>
+                  </div>
+                  <form onSubmit={handleProfileSubmit} className="space-y-5 p-5" noValidate>
+                    {!customerUser.name || !customerUser.document ? <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs leading-relaxed text-amber-900"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><p>Complete seu cadastro para comprar. Depois de salvo, você não precisará digitar esses dados novamente no checkout.</p></div> : null}
+                    <div>
+                      <label htmlFor="profile-name" className="mb-2 block text-xs font-semibold text-ink">Nome completo ou razão social <span className="text-rose-600">*</span></label>
+                      <div className="relative"><UserRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" /><input id="profile-name" type="text" autoComplete="name" required value={profileName} onChange={event => setProfileName(event.target.value)} placeholder="Digite seu nome completo" className="min-h-12 w-full rounded-xl border border-borderSoft bg-surface-warm py-3 pl-10 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15" /></div>
+                    </div>
+                    <div>
+                      <label htmlFor="profile-email" className="mb-2 block text-xs font-semibold text-ink">E-mail verificado</label>
+                      <div className="relative"><Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" /><input id="profile-email" type="email" value={customerUser.email} readOnly aria-readonly="true" className="min-h-12 w-full cursor-not-allowed rounded-xl border border-borderSoft bg-surface-warm py-3 pl-10 pr-3 text-sm text-ink-muted outline-none" /></div>
+                    </div>
+                    <div>
+                      <label htmlFor="profile-document" className="mb-2 block text-xs font-semibold text-ink">CPF ou CNPJ <span className="text-rose-600">*</span></label>
+                      <div className="relative"><FileCheck className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" /><input id="profile-document" type="text" inputMode="numeric" autoComplete="off" required value={profileDocument} onChange={event => setProfileDocument(formatTaxId(event.target.value))} placeholder="000.000.000-00" className="min-h-12 w-full rounded-xl border border-borderSoft bg-surface-warm py-3 pl-10 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15" /></div>
+                      <p className="mt-1.5 text-[11px] leading-relaxed text-ink-muted">O documento é validado e utilizado na geração da cobrança e do recibo.</p>
+                    </div>
+                    {profileFeedback && <div role="status" className={`flex items-start gap-2 rounded-xl border p-3 text-xs ${profileFeedback.type === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>{profileFeedback.type === 'error' ? <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> : <CheckCircle className="h-4 w-4 shrink-0" aria-hidden="true" />}<span>{profileFeedback.message}</span></div>}
+                    <button type="submit" disabled={profileSaving} className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-pressed disabled:cursor-wait disabled:opacity-65 sm:w-auto sm:min-w-48">{profileSaving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}{profileSaving ? 'Salvando...' : shouldReturnToCheckout ? 'Salvar e continuar compra' : 'Salvar meus dados'}</button>
+                  </form>
+                </section>
+                <aside className="h-fit rounded-2xl border border-borderSoft bg-white p-5 shadow-xs"><div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary-tint text-primary"><LockKeyhole className="h-5 w-5" aria-hidden="true" /></div><h2 className="font-bold text-ink">Compra mais rápida</h2><p className="mt-2 text-xs leading-relaxed text-ink-muted">Nome e documento ficam vinculados à sua conta e são carregados automaticamente quando você inicia uma compra.</p><div className="mt-4 rounded-xl bg-surface-warm p-3 text-[11px] leading-relaxed text-ink-muted"><strong className="text-ink">Seus dados continuam protegidos.</strong><br />O e-mail não pode ser alterado por esta tela e identifica sua conta verificada.</div><button type="button" onClick={() => void customerLogout()} className="mt-5 flex min-h-11 w-full cursor-pointer items-center justify-center rounded-xl border border-rose-200 px-4 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50">Sair da conta</button></aside>
               </div>
             )}
           </div>

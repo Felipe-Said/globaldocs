@@ -4,9 +4,10 @@ import {
   Banner, CartItem, Collection, Coupon, DigitalProduct, FileCategory, FileFormat,
   Order, PaymentMethod, ProductType, StoreSettings,
 } from '../types';
+import { isValidTaxId, normalizeCustomerName, normalizeTaxId } from '../lib/customer-profile';
 
 export interface CustomerUser { id: string; email: string; name?: string; document?: string }
-type Result = { success: boolean; message: string };
+type Result = { success: boolean; message: string; customer?: CustomerUser };
 type NewProduct = Omit<DigitalProduct, 'id' | 'createdAt' | 'updatedAt' | 'downloadsCount'>;
 
 interface StoreContextType {
@@ -17,6 +18,7 @@ interface StoreContextType {
   customerLogin: (email: string, password: string) => Promise<Result>;
   requestCustomerCode: (email: string) => Promise<Result>;
   verifyCustomerCode: (email: string, token: string) => Promise<Result>;
+  updateCustomerProfile: (name: string, document: string) => Promise<Result>;
   refreshCustomerOrders: () => Promise<void>;
   customerLogout: () => Promise<void>;
   isAdminAuthenticated: boolean;
@@ -330,7 +332,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const user = await loadCustomerData();
           if (user) {
             showToast('Conta acessada com segurança.');
-            return { success: true, message: 'Conta acessada com sucesso.' };
+            return { success: true, message: 'Conta acessada com sucesso.', customer: user };
           }
         }
       }
@@ -355,7 +357,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const user = await loadCustomerData();
     if (!user) return { success: false, message: 'A conta foi autenticada, mas não foi possível carregar seu perfil.' };
     showToast('Conta acessada com segurança.');
-    return { success: true, message: 'Conta acessada com sucesso.' };
+    return { success: true, message: 'Conta acessada com sucesso.', customer: user };
   };
 
   const verifyCustomerCode = async (email: string, token: string): Promise<Result> => {
@@ -374,7 +376,33 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const user = await loadCustomerData();
     if (!user) return { success: false, message: 'A conta foi validada, mas não foi possível carregar seu perfil.' };
     showToast('Conta acessada com segurança.');
-    return { success: true, message: 'Conta acessada com sucesso.' };
+    return { success: true, message: 'Conta acessada com sucesso.', customer: user };
+  };
+
+  const updateCustomerProfile = async (name: string, document: string): Promise<Result> => {
+    if (!customerUser) return { success: false, message: 'Sua sessão expirou. Entre novamente para continuar.' };
+    const normalizedName = normalizeCustomerName(name);
+    const normalizedDocument = normalizeTaxId(document);
+    if (normalizedName.length < 3) return { success: false, message: 'Informe seu nome completo ou razão social.' };
+    if (!isValidTaxId(normalizedDocument)) return { success: false, message: 'Informe um CPF ou CNPJ válido.' };
+
+    const { data, error } = await supabase
+      .from('customer_profiles')
+      .update({ display_name: normalizedName, document: normalizedDocument })
+      .eq('user_id', customerUser.id)
+      .select('user_id,email,display_name,document')
+      .single();
+    if (error || !data) return { success: false, message: 'Não foi possível salvar seus dados. Tente novamente.' };
+
+    const updatedCustomer: CustomerUser = {
+      id: String(data.user_id),
+      email: String(data.email),
+      name: String(data.display_name),
+      document: String(data.document),
+    };
+    setCustomerUser(updatedCustomer);
+    showToast('Dados do perfil salvos com segurança.');
+    return { success: true, message: 'Perfil atualizado.', customer: updatedCustomer };
   };
 
   const refreshCustomerOrders = async () => { if (customerUser) await loadCustomerData(); };
@@ -455,8 +483,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const createOrder: StoreContextType['createOrder'] = async value => {
     const { data, error } = await supabase.rpc('create_order', {
-      p_customer_name: value.customerName, p_customer_email: value.customerEmail,
-      p_customer_document: value.customerDocument, p_shipping_address: value.shippingAddress || '',
+      p_customer_name: normalizeCustomerName(value.customerName), p_customer_email: value.customerEmail,
+      p_customer_document: normalizeTaxId(value.customerDocument), p_shipping_address: value.shippingAddress || '',
       p_payment_method: value.paymentMethod, p_cart: cart.map(item => ({ productId: item.product.id, quantity: item.quantity })),
       p_coupon_code: appliedCoupon?.code || null,
     });
@@ -499,7 +527,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return <StoreContext.Provider value={{
     selectedProduct, setSelectedProduct, isCartOpen, setIsCartOpen, isCheckoutOpen, setIsCheckoutOpen,
-    customerUser, customerLogin, requestCustomerCode, verifyCustomerCode, refreshCustomerOrders, customerLogout,
+    customerUser, customerLogin, requestCustomerCode, verifyCustomerCode, updateCustomerProfile, refreshCustomerOrders, customerLogout,
     isAdminAuthenticated, adminLogin, adminLogout,
     products, addProduct, updateProduct, deleteProduct, toggleProductStatus,
     collections, addCollection, updateCollection, deleteCollection,
