@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle, ArrowLeft, ArrowRight, Building2, Calendar, CheckCircle, Clock, Copy,
   CreditCard, Download, Eye, EyeOff, FileCheck, FileText, Key, LoaderCircle,
-  LockKeyhole, LogOut, Mail, PackageCheck, RefreshCw, Search, ShieldCheck,
-  ShoppingBag, UserRound,
+  LockKeyhole, Mail, Menu, PackageCheck, PanelLeftClose, PanelLeftOpen, RefreshCw,
+  Search, ShieldCheck, ShoppingBag, UserRound,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { MonkeyLoginAvatar } from './MonkeyLoginAvatar';
+import { CustomerDashboardSidebar, type CustomerPanelView } from './ui/dashboard-sidebar';
 
 type AccessStep = 'email' | 'code';
 type AccessMode = 'login' | 'register';
@@ -30,6 +31,9 @@ export const MyDownloadsView: React.FC = () => {
   const [resendIn, setResendIn] = useState(0);
   const [filterQuery, setFilterQuery] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<CustomerPanelView>('overview');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const shouldReturnToCheckout = new URLSearchParams(location.search).get('return') === 'checkout';
 
   useEffect(() => {
@@ -37,6 +41,20 @@ export const MyDownloadsView: React.FC = () => {
     const timer = window.setInterval(() => setResendIn(value => Math.max(0, value - 1)), 1000);
     return () => window.clearInterval(timer);
   }, [resendIn]);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileSidebarOpen(false);
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [mobileSidebarOpen]);
 
   const sendCode = async () => {
     setFeedback(null);
@@ -115,10 +133,21 @@ export const MyDownloadsView: React.FC = () => {
     : [], [customerUser, orders]);
   const paidOrders = myOrders.filter(order => order.status === 'paid');
   const pendingOrders = myOrders.filter(order => order.status === 'pending');
+  const downloadCount = paidOrders.reduce((total, order) => total + order.items.length, 0);
   const filteredOrders = myOrders.filter(order => {
     const query = filterQuery.toLowerCase().trim();
     return !query || order.id.toLowerCase().includes(query) || order.items.some(item => item.productTitle.toLowerCase().includes(query));
   });
+  const filteredDownloads = paidOrders.flatMap(order => order.items.map((item, index) => ({ order, item, index }))).filter(({ order, item }) => {
+    const query = filterQuery.toLowerCase().trim();
+    return !query || order.id.toLowerCase().includes(query) || item.productTitle.toLowerCase().includes(query);
+  });
+
+  const selectView = (view: CustomerPanelView) => {
+    setActiveView(view);
+    setFilterQuery('');
+    setMobileSidebarOpen(false);
+  };
 
   if (!customerUser) {
     return (
@@ -220,77 +249,103 @@ export const MyDownloadsView: React.FC = () => {
     );
   }
 
+  const viewCopy: Record<CustomerPanelView, { eyebrow: string; title: string; description: string }> = {
+    overview: { eyebrow: 'Painel do cliente', title: `Olá, ${customerUser.name?.split(' ')[0] || 'cliente'}`, description: 'Acompanhe seus pedidos e acesse rapidamente tudo o que já foi liberado.' },
+    orders: { eyebrow: 'Compras', title: 'Meus pedidos', description: 'Consulte pagamentos, valores e todos os itens vinculados à sua conta.' },
+    downloads: { eyebrow: 'Minha biblioteca', title: 'Downloads e acessos', description: 'Baixe arquivos e consulte credenciais dos produtos que já foram liberados.' },
+    profile: { eyebrow: 'Conta', title: 'Meu perfil', description: 'Confira os dados usados para identificar sua conta e vincular seus pedidos.' },
+  };
+  const currentView = viewCopy[activeView];
+
   return (
-    <main className="mx-auto max-w-7xl animate-fadeIn px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <section className="mb-8 overflow-hidden rounded-2xl border border-borderSoft bg-surface shadow-xs">
-        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-tint font-bold text-primary">{customerUser.name ? customerUser.name.charAt(0).toUpperCase() : <UserRound className="h-5 w-5" aria-hidden="true" />}</div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-ink">{customerUser.name || 'Minha conta'}</h1><span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800"><CheckCircle className="h-3 w-3" aria-hidden="true" /> Verificada</span></div>
-              <p className="truncate text-xs text-ink-muted">{customerUser.email}</p>
-            </div>
+    <div className="bg-surface-warm px-0 py-0 sm:px-4 sm:py-6 lg:px-6">
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu da conta">
+          <button type="button" aria-label="Fechar menu" onClick={() => setMobileSidebarOpen(false)} className="absolute inset-0 cursor-default bg-black/35 backdrop-blur-[2px]" />
+          <div className="absolute inset-y-0 left-0 animate-fadeIn shadow-notion-modal">
+            <CustomerDashboardSidebar activeView={activeView} customerName={customerUser.name} customerEmail={customerUser.email} orderCount={myOrders.length} downloadCount={downloadCount} mobile onSelect={selectView} onCatalog={() => navigate('/')} onLogout={() => void customerLogout()} onClose={() => setMobileSidebarOpen(false)} />
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void refreshCustomerOrders()} className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl border border-borderSoft px-3 text-xs font-semibold text-ink transition-colors hover:bg-surface-warm focus:outline-none focus:ring-2 focus:ring-primary"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Atualizar</button>
-            <button type="button" onClick={() => void customerLogout()} className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl border border-rose-200 px-3 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500"><LogOut className="h-3.5 w-3.5" aria-hidden="true" /> Sair</button>
-          </div>
-        </div>
-      </section>
-
-      <header className="mb-6">
-        <p className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary"><PackageCheck className="h-4 w-4" aria-hidden="true" /> Painel do cliente</p>
-        <h2 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">Pedidos e downloads</h2>
-        <p className="mt-1 max-w-2xl text-sm text-ink-muted">Acompanhe pagamentos e acesse arquivos e credenciais já liberados.</p>
-      </header>
-
-      <section aria-label="Resumo dos pedidos" className="mb-7 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-borderSoft bg-surface p-4"><p className="text-xs text-ink-muted">Pedidos</p><p className="mt-1 text-2xl font-bold tabular-nums text-ink">{myOrders.length}</p></div>
-        <div className="rounded-xl border border-borderSoft bg-surface p-4"><p className="text-xs text-ink-muted">Liberados</p><p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700">{paidOrders.length}</p></div>
-        <div className="col-span-2 rounded-xl border border-borderSoft bg-surface p-4 sm:col-span-1"><p className="text-xs text-ink-muted">Aguardando pagamento</p><p className="mt-1 text-2xl font-bold tabular-nums text-amber-700">{pendingOrders.length}</p></div>
-      </section>
-
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full max-w-sm"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" /><label htmlFor="order-search" className="sr-only">Buscar pedido</label><input id="order-search" type="search" value={filterQuery} onChange={event => setFilterQuery(event.target.value)} placeholder="Buscar item ou número do pedido" className="min-h-11 w-full rounded-xl border border-borderSoft bg-surface-warm py-2 pl-10 pr-3 text-sm text-ink outline-none focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15" /></div>
-        <Link to="/" className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-xs font-semibold text-white transition-colors hover:bg-primary-pressed"><ShoppingBag className="h-4 w-4" aria-hidden="true" /> Continuar comprando</Link>
-      </div>
-
-      {filteredOrders.length === 0 ? (
-        <section className="rounded-2xl border border-borderSoft bg-surface p-10 text-center"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-warm text-ink-muted"><FileText className="h-6 w-6" aria-hidden="true" /></div><h3 className="font-semibold text-ink">Nenhum pedido encontrado</h3><p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">{filterQuery ? 'Tente buscar por outro termo.' : 'Quando você concluir uma compra, o pedido aparecerá aqui automaticamente.'}</p></section>
-      ) : (
-        <div className="space-y-5">
-          {filteredOrders.map(order => {
-            const isPaid = order.status === 'paid';
-            return (
-              <article key={order.id} className="overflow-hidden rounded-2xl border border-borderSoft bg-surface shadow-xs">
-                <header className="flex flex-col gap-3 border-b border-borderSoft bg-surface-warm p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                  <div className="flex flex-wrap items-center gap-2 text-xs"><span className="font-mono font-bold text-ink">{order.id}</span><span className="text-ink-faint">•</span><span className="flex items-center gap-1 text-ink-muted"><Calendar className="h-3.5 w-3.5" aria-hidden="true" /> {new Date(order.createdAt).toLocaleDateString('pt-BR')}</span></div>
-                  <div className="flex flex-wrap items-center gap-3 text-xs"><span className="text-ink-muted">Total: <strong className="text-ink">{order.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span><span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{isPaid ? <CheckCircle className="h-3 w-3" aria-hidden="true" /> : <Clock className="h-3 w-3" aria-hidden="true" />}{isPaid ? 'Pago e liberado' : 'Aguardando pagamento'}</span></div>
-                </header>
-                <div className="divide-y divide-borderSoft">
-                  {order.items.map((item, index) => (
-                    <div key={`${item.productId}-${index}`} className="space-y-4 p-4 sm:p-5">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex min-w-0 items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-borderSoft bg-surface-warm text-primary"><FileText className="h-4 w-4" aria-hidden="true" /></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h4 className="font-bold text-ink">{item.productTitle}</h4>{getItemTypeBadge(item.productType)}</div>{isPaid && (item.zipFileName || item.downloadFileName) && <p className="mt-1 break-all font-mono text-[11px] text-ink-muted">{item.zipFileName || item.downloadFileName}</p>}</div></div>
-                        {isPaid ? <button type="button" onClick={() => downloadFile(item.productTitle, item.zipFileName || item.downloadFileName, item.format)} className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-xs font-semibold text-white transition-colors hover:bg-primary-pressed focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"><Download className="h-4 w-4" aria-hidden="true" /> Baixar arquivo</button> : <span className="inline-flex min-h-11 items-center gap-1.5 self-start rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-800"><Clock className="h-3.5 w-3.5" aria-hidden="true" /> Liberação após pagamento</span>}
-                      </div>
-                      {isPaid && (item.accessLogins || item.proxyDetails) && (
-                        <div className="space-y-2 rounded-xl border border-borderSoft bg-surface-warm p-3.5">
-                          <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink"><Key className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> Credenciais liberadas</p>
-                          {[['Acesso', item.accessLogins], ['Proxy', item.proxyDetails]].filter(([, value]) => value).map(([label, value]) => {
-                            const copyId = `${label}-${order.id}-${index}`;
-                            return <div key={label} className="flex items-center justify-between gap-2 rounded-lg border border-borderSoft bg-white p-2.5 font-mono text-xs"><p className="min-w-0 break-all text-ink"><span className="text-ink-muted">{label}: </span>{value}</p><button type="button" onClick={() => void handleCopy(value || '', copyId)} aria-label={`Copiar ${label.toLowerCase()}`} className="flex min-h-9 shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-borderSoft px-2 text-[10px] font-semibold text-ink hover:bg-surface-warm">{copiedKey === copyId ? <CheckCircle className="h-3 w-3 text-emerald-600" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}{copiedKey === copyId ? 'Copiado' : 'Copiar'}</button></div>;
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </article>
-            );
-          })}
         </div>
       )}
-    </main>
+
+      <div className="mx-auto flex min-h-[720px] w-full max-w-[1440px] overflow-hidden border-borderSoft bg-surface shadow-notion-card sm:rounded-2xl sm:border">
+        <div className="hidden shrink-0 lg:block">
+          <CustomerDashboardSidebar activeView={activeView} customerName={customerUser.name} customerEmail={customerUser.email} orderCount={myOrders.length} downloadCount={downloadCount} collapsed={sidebarCollapsed} onSelect={selectView} onCatalog={() => navigate('/')} onLogout={() => void customerLogout()} />
+        </div>
+
+        <section className="min-w-0 flex-1 bg-surface-warm/60">
+          <div className="sticky top-14 z-20 flex min-h-14 items-center justify-between border-b border-borderSoft bg-surface/95 px-3 backdrop-blur-md sm:top-16 sm:px-5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <button type="button" onClick={() => setMobileSidebarOpen(true)} aria-label="Abrir menu da conta" aria-expanded={mobileSidebarOpen} className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl text-ink-muted transition-colors hover:bg-surface-warm hover:text-ink lg:hidden"><Menu className="h-5 w-5" aria-hidden="true" /></button>
+              <button type="button" onClick={() => setSidebarCollapsed(value => !value)} aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} aria-pressed={sidebarCollapsed} className="hidden h-11 w-11 cursor-pointer items-center justify-center rounded-xl text-ink-muted transition-colors hover:bg-surface-warm hover:text-ink lg:flex">{sidebarCollapsed ? <PanelLeftOpen className="h-[18px] w-[18px]" aria-hidden="true" /> : <PanelLeftClose className="h-[18px] w-[18px]" aria-hidden="true" />}</button>
+              <div className="min-w-0 text-xs text-ink-muted"><span className="hidden sm:inline">Minha conta</span><span className="hidden px-2 sm:inline">/</span><strong className="truncate font-semibold text-ink">{currentView.title}</strong></div>
+            </div>
+            <button type="button" onClick={() => void refreshCustomerOrders()} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-borderSoft bg-white px-3 text-xs font-semibold text-ink transition-colors hover:bg-surface-warm"><RefreshCw className="h-4 w-4" aria-hidden="true" /><span className="hidden sm:inline">Atualizar</span></button>
+          </div>
+
+          <div className="p-4 sm:p-6 lg:p-8">
+            <header className="mb-7">
+              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.15em] text-primary">{currentView.eyebrow}</p>
+              <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{currentView.title}</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">{currentView.description}</p>
+            </header>
+
+            {activeView === 'overview' && (
+              <div className="space-y-6 animate-fadeIn">
+                <section aria-label="Resumo da conta" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {[
+                    { label: 'Pedidos realizados', value: myOrders.length, icon: ShoppingBag, color: 'bg-primary-tint text-primary-pressed', target: 'orders' as CustomerPanelView },
+                    { label: 'Itens liberados', value: downloadCount, icon: Download, color: 'bg-emerald-100 text-emerald-700', target: 'downloads' as CustomerPanelView },
+                    { label: 'Aguardando pagamento', value: pendingOrders.length, icon: Clock, color: 'bg-amber-100 text-amber-800', target: 'orders' as CustomerPanelView },
+                  ].map(card => (
+                    <button key={card.label} type="button" onClick={() => selectView(card.target)} className="group min-h-[132px] cursor-pointer rounded-2xl border border-borderSoft bg-white p-5 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-notion-hover">
+                      <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${card.color}`}><card.icon className="h-[18px] w-[18px]" aria-hidden="true" /></div>
+                      <p className="text-2xl font-bold tabular-nums text-ink">{card.value}</p><p className="mt-0.5 text-xs text-ink-muted">{card.label}</p>
+                    </button>
+                  ))}
+                </section>
+
+                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.7fr)]">
+                  <section className="overflow-hidden rounded-2xl border border-borderSoft bg-white shadow-xs">
+                    <div className="flex items-center justify-between border-b border-borderSoft px-5 py-4"><div><h2 className="font-bold text-ink">Pedidos recentes</h2><p className="mt-0.5 text-xs text-ink-muted">Últimas movimentações da sua conta</p></div><button type="button" onClick={() => selectView('orders')} className="min-h-11 cursor-pointer px-2 text-xs font-semibold text-primary hover:underline">Ver todos</button></div>
+                    {myOrders.length === 0 ? <div className="p-8 text-center text-sm text-ink-muted">Você ainda não realizou nenhum pedido.</div> : <div className="divide-y divide-borderSoft">{myOrders.slice(0, 4).map(order => <button key={order.id} type="button" onClick={() => selectView('orders')} className="flex min-h-[76px] w-full cursor-pointer items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-surface-warm"><div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${order.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>{order.status === 'paid' ? <CheckCircle className="h-[18px] w-[18px]" aria-hidden="true" /> : <Clock className="h-[18px] w-[18px]" aria-hidden="true" />}</div><div className="min-w-0 flex-1"><p className="truncate font-mono text-xs font-bold text-ink">{order.id}</p><p className="mt-1 truncate text-xs text-ink-muted">{order.items.map(item => item.productTitle).join(', ')}</p></div><div className="text-right"><p className="text-xs font-bold text-ink">{order.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p><p className="mt-1 text-[10px] text-ink-muted">{new Date(order.createdAt).toLocaleDateString('pt-BR')}</p></div></button>)}</div>}
+                  </section>
+
+                  <aside className="rounded-2xl border border-borderSoft bg-ink p-5 text-white shadow-xs">
+                    <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl bg-white/10"><PackageCheck className="h-5 w-5" aria-hidden="true" /></div>
+                    <h2 className="text-lg font-bold">Tudo em um só lugar</h2><p className="mt-2 text-sm leading-relaxed text-white/65">Seus pedidos, arquivos e credenciais ficam vinculados automaticamente a este e-mail.</p>
+                    <button type="button" onClick={() => navigate('/')} className="mt-6 flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-white px-4 text-xs font-bold text-ink transition-colors hover:bg-white/90"><ShoppingBag className="h-4 w-4" aria-hidden="true" /> Explorar catálogo</button>
+                  </aside>
+                </div>
+              </div>
+            )}
+
+            {(activeView === 'orders' || activeView === 'downloads') && (
+              <div className="animate-fadeIn">
+                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="relative w-full max-w-md"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" /><label htmlFor="account-search" className="sr-only">Buscar na conta</label><input id="account-search" type="search" value={filterQuery} onChange={event => setFilterQuery(event.target.value)} placeholder={activeView === 'orders' ? 'Buscar pedido ou produto' : 'Buscar arquivo ou produto'} className="min-h-11 w-full rounded-xl border border-borderSoft bg-white py-2 pl-10 pr-3 text-sm text-ink outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15" /></div>
+                  <button type="button" onClick={() => navigate('/')} className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-xs font-semibold text-white transition-colors hover:bg-primary-pressed"><ShoppingBag className="h-4 w-4" aria-hidden="true" /> Continuar comprando</button>
+                </div>
+
+                {activeView === 'orders' && (filteredOrders.length === 0 ? (
+                  <section className="rounded-2xl border border-borderSoft bg-white p-10 text-center"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-warm text-ink-muted"><FileText className="h-6 w-6" aria-hidden="true" /></div><h2 className="font-semibold text-ink">Nenhum pedido encontrado</h2><p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">{filterQuery ? 'Tente buscar por outro termo.' : 'Quando você concluir uma compra, o pedido aparecerá aqui automaticamente.'}</p></section>
+                ) : <div className="space-y-4">{filteredOrders.map(order => { const isPaid = order.status === 'paid'; return <article key={order.id} className="overflow-hidden rounded-2xl border border-borderSoft bg-white shadow-xs"><header className="flex flex-col gap-3 border-b border-borderSoft bg-surface-warm p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="flex flex-wrap items-center gap-2 text-xs"><span className="font-mono font-bold text-ink">{order.id}</span><span className="text-ink-faint">•</span><span className="flex items-center gap-1 text-ink-muted"><Calendar className="h-3.5 w-3.5" aria-hidden="true" /> {new Date(order.createdAt).toLocaleDateString('pt-BR')}</span></div><div className="flex flex-wrap items-center gap-3 text-xs"><span className="text-ink-muted">Total: <strong className="text-ink">{order.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span><span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{isPaid ? <CheckCircle className="h-3 w-3" aria-hidden="true" /> : <Clock className="h-3 w-3" aria-hidden="true" />}{isPaid ? 'Pago e liberado' : 'Aguardando pagamento'}</span></div></header><div className="divide-y divide-borderSoft">{order.items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="flex min-w-0 items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-borderSoft bg-surface-warm text-primary"><FileText className="h-4 w-4" aria-hidden="true" /></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-ink">{item.productTitle}</h3>{getItemTypeBadge(item.productType)}</div><p className="mt-1 text-xs text-ink-muted">{item.format}</p></div></div>{isPaid ? <button type="button" onClick={() => selectView('downloads')} className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-borderSoft px-4 text-xs font-semibold text-ink transition-colors hover:bg-surface-warm"><Download className="h-4 w-4" aria-hidden="true" /> Abrir biblioteca</button> : <span className="inline-flex min-h-11 items-center gap-1.5 self-start rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-800"><Clock className="h-3.5 w-3.5" aria-hidden="true" /> Liberação após pagamento</span>}</div>)}</div></article>; })}</div>)}
+
+                {activeView === 'downloads' && (filteredDownloads.length === 0 ? (
+                  <section className="rounded-2xl border border-borderSoft bg-white p-10 text-center"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-warm text-ink-muted"><Download className="h-6 w-6" aria-hidden="true" /></div><h2 className="font-semibold text-ink">Nenhum item liberado</h2><p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">{filterQuery ? 'Nenhum download corresponde à sua busca.' : 'Seus arquivos aparecerão aqui após a confirmação do pagamento.'}</p></section>
+                ) : <div className="grid gap-4 xl:grid-cols-2">{filteredDownloads.map(({ order, item, index }) => <article key={`${order.id}-${item.productId}-${index}`} className="flex flex-col rounded-2xl border border-borderSoft bg-white p-5 shadow-xs"><div className="mb-4 flex items-start gap-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-tint text-primary"><FileText className="h-5 w-5" aria-hidden="true" /></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="font-bold text-ink">{item.productTitle}</h2>{getItemTypeBadge(item.productType)}</div><p className="mt-1 truncate font-mono text-[10px] text-ink-muted">Pedido {order.id}</p></div></div>{(item.zipFileName || item.downloadFileName) && <p className="mb-4 break-all rounded-lg bg-surface-warm p-2.5 font-mono text-[11px] text-ink-muted">{item.zipFileName || item.downloadFileName}</p>}{(item.accessLogins || item.proxyDetails) && <div className="mb-4 space-y-2 border-t border-borderSoft pt-4"><p className="flex items-center gap-1.5 text-[11px] font-bold text-ink"><Key className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> Credenciais liberadas</p>{[['Acesso', item.accessLogins], ['Proxy', item.proxyDetails]].filter(([, value]) => value).map(([label, value]) => { const copyId = `${label}-${order.id}-${index}`; return <div key={label} className="flex items-center justify-between gap-2 rounded-lg border border-borderSoft bg-surface-warm p-2.5 font-mono text-xs"><p className="min-w-0 break-all text-ink"><span className="text-ink-muted">{label}: </span>{value}</p><button type="button" onClick={() => void handleCopy(value || '', copyId)} aria-label={`Copiar ${label.toLowerCase()}`} className="flex min-h-10 shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-borderSoft bg-white px-2.5 text-[10px] font-semibold text-ink hover:bg-surface-warm">{copiedKey === copyId ? <CheckCircle className="h-3 w-3 text-emerald-600" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}{copiedKey === copyId ? 'Copiado' : 'Copiar'}</button></div>; })}</div>}<button type="button" onClick={() => downloadFile(item.productTitle, item.zipFileName || item.downloadFileName, item.format)} className="mt-auto flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-xs font-semibold text-white transition-colors hover:bg-primary-pressed"><Download className="h-4 w-4" aria-hidden="true" /> Baixar arquivo</button></article>)}</div>)}
+              </div>
+            )}
+
+            {activeView === 'profile' && (
+              <div className="grid gap-5 animate-fadeIn xl:grid-cols-[minmax(0,1fr)_320px]">
+                <section className="overflow-hidden rounded-2xl border border-borderSoft bg-white shadow-xs"><div className="border-b border-borderSoft px-5 py-4"><h2 className="font-bold text-ink">Dados da conta</h2><p className="mt-1 text-xs text-ink-muted">Informações vinculadas aos seus pedidos.</p></div><dl className="divide-y divide-borderSoft"><div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr]"><dt className="text-xs font-semibold text-ink-muted">Nome</dt><dd className="text-sm font-medium text-ink">{customerUser.name || 'Não informado'}</dd></div><div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr]"><dt className="text-xs font-semibold text-ink-muted">E-mail</dt><dd className="break-all text-sm font-medium text-ink">{customerUser.email}</dd></div><div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr]"><dt className="text-xs font-semibold text-ink-muted">Documento</dt><dd className="text-sm font-medium text-ink">{customerUser.document || 'Não informado'}</dd></div><div className="grid gap-1 px-5 py-4 sm:grid-cols-[160px_1fr]"><dt className="text-xs font-semibold text-ink-muted">Status</dt><dd><span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-800"><CheckCircle className="h-3 w-3" aria-hidden="true" /> Conta verificada</span></dd></div></dl></section>
+                <aside className="rounded-2xl border border-borderSoft bg-white p-5 shadow-xs"><div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary-tint text-primary"><LockKeyhole className="h-5 w-5" aria-hidden="true" /></div><h2 className="font-bold text-ink">Acesso protegido</h2><p className="mt-2 text-xs leading-relaxed text-ink-muted">Sua senha/token é pessoal. Não compartilhe com terceiros. Para receber uma nova, encerre a sessão e use a opção de recuperação na tela de entrada.</p><button type="button" onClick={() => void customerLogout()} className="mt-5 flex min-h-11 w-full cursor-pointer items-center justify-center rounded-xl border border-rose-200 px-4 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50">Sair da conta</button></aside>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
   );
 };
