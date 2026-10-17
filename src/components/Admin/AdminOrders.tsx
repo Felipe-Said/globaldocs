@@ -124,7 +124,7 @@ export const AdminOrders: React.FC = () => {
                       {formatPrice(order.total)}
                     </td>
                     <td className="py-3 px-4 uppercase text-[11px] font-medium text-ink-muted">
-                      {order.paymentMethod}
+                      {order.paymentMethod === 'wallet' ? 'Carteira' : order.paymentMethod}
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap shrink-0 ${
@@ -199,7 +199,7 @@ export const AdminOrders: React.FC = () => {
                   <div className="font-bold text-ink mt-0.5">
                     {new Date(selectedOrder.createdAt).toLocaleDateString('pt-BR')}
                   </div>
-                  <div className="text-ink-muted uppercase">{selectedOrder.paymentMethod}</div>
+                  <div className="text-ink-muted uppercase">{selectedOrder.paymentMethod === 'wallet' ? 'Carteira' : selectedOrder.paymentMethod}</div>
                 </div>
               </div>
 

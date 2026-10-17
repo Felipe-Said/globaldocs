@@ -7,7 +7,37 @@ import {
 import { isValidTaxId, normalizeCustomerName, normalizeTaxId } from '../lib/customer-profile';
 
 export interface CustomerUser { id: string; email: string; name?: string; document?: string }
-type Result = { success: boolean; message: string; customer?: CustomerUser };
+export interface WalletTransaction {
+  id: string;
+  type: 'credit' | 'debit';
+  amount: number;
+  balanceAfter: number;
+  description: string;
+  orderId?: string;
+  topUpId?: string;
+  createdAt: string;
+}
+export interface WalletTopUp {
+  id: string;
+  amount: number;
+  status: 'pending' | 'paid' | 'failed' | 'expired' | 'refunded';
+  createdAt: string;
+  paidAt?: string;
+}
+export interface WalletTopUpPayment {
+  topUpId: string;
+  amount: number;
+  topUpStatus: WalletTopUp['status'];
+  paymentId: string;
+  status: string;
+  payAddress: string;
+  payAmount: number;
+  payCurrency: string;
+  actuallyPaid: number;
+  expiresAt?: string;
+  balance?: number;
+}
+type Result = { success: boolean; message: string; customer?: CustomerUser; payment?: WalletTopUpPayment };
 type NewProduct = Omit<DigitalProduct, 'id' | 'createdAt' | 'updatedAt' | 'downloadsCount'>;
 
 interface StoreContextType {
@@ -19,6 +49,12 @@ interface StoreContextType {
   requestCustomerCode: (email: string) => Promise<Result>;
   verifyCustomerCode: (email: string, token: string) => Promise<Result>;
   updateCustomerProfile: (name: string, document: string) => Promise<Result>;
+  walletBalance: number;
+  walletTransactions: WalletTransaction[];
+  walletTopUps: WalletTopUp[];
+  refreshWallet: () => Promise<void>;
+  createWalletTopUp: (amount: number) => Promise<Result>;
+  checkWalletTopUp: (topUpId: string) => Promise<Result>;
   refreshCustomerOrders: () => Promise<void>;
   customerLogout: () => Promise<void>;
   isAdminAuthenticated: boolean;
@@ -100,6 +136,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [settings, setSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerUser, setCustomerUser] = useState<CustomerUser | null>(null);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [walletTransactions, setWalletTransactions] = useState<WalletTransaction[]>([]);
+  const [walletTopUps, setWalletTopUps] = useState<WalletTopUp[]>([]);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<DigitalProduct | null>(null);
@@ -232,12 +271,39 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return null;
     }
 
-    const { data: customerOrders, error: ordersError } = await supabase.rpc('get_my_orders');
+    const [{ data: customerOrders, error: ordersError }, { data: wallet, error: walletError }] = await Promise.all([
+      supabase.rpc('get_my_orders'),
+      supabase.rpc('get_my_wallet'),
+    ]);
     if (ordersError) {
       setOrders([]);
       showToast('Sua conta foi acessada, mas os pedidos não puderam ser carregados.', 'error');
     } else {
       setOrders((customerOrders || []).map(orderFromRow));
+    }
+    if (walletError || !wallet) {
+      setWalletBalance(0);
+      setWalletTransactions([]);
+      setWalletTopUps([]);
+    } else {
+      setWalletBalance(Number(wallet.balance || 0));
+      setWalletTransactions((wallet.transactions || []).map((item: any) => ({
+        id: String(item.id),
+        type: item.transaction_type,
+        amount: Number(item.amount),
+        balanceAfter: Number(item.balance_after),
+        description: String(item.description),
+        orderId: item.order_id || undefined,
+        topUpId: item.topup_id || undefined,
+        createdAt: String(item.created_at),
+      })));
+      setWalletTopUps((wallet.topups || []).map((item: any) => ({
+        id: String(item.id),
+        amount: Number(item.amount),
+        status: item.status,
+        createdAt: String(item.created_at),
+        paidAt: item.paid_at || undefined,
+      })));
     }
 
     const user: CustomerUser = {
@@ -270,6 +336,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setIsAdminAuthenticated(false);
         setCustomerUser(null);
         setOrders([]);
+      setWalletBalance(0);
+      setWalletTransactions([]);
+      setWalletTopUps([]);
         setCoupons([]);
         void loadStoreData();
       }
@@ -405,11 +474,62 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return { success: true, message: 'Perfil atualizado.', customer: updatedCustomer };
   };
 
+  const refreshWallet = async () => {
+    if (!customerUser) return;
+    const { data, error } = await supabase.rpc('get_my_wallet');
+    if (error || !data) return showToast('Não foi possível atualizar a carteira.', 'error');
+    setWalletBalance(Number(data.balance || 0));
+    setWalletTransactions((data.transactions || []).map((item: any) => ({
+      id: String(item.id), type: item.transaction_type, amount: Number(item.amount),
+      balanceAfter: Number(item.balance_after), description: String(item.description),
+      orderId: item.order_id || undefined, topUpId: item.topup_id || undefined, createdAt: String(item.created_at),
+    })));
+    setWalletTopUps((data.topups || []).map((item: any) => ({
+      id: String(item.id), amount: Number(item.amount), status: item.status,
+      createdAt: String(item.created_at), paidAt: item.paid_at || undefined,
+    })));
+  };
+
+  const customerAccessToken = async () => {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token || '';
+  };
+
+  const createWalletTopUp = async (amount: number): Promise<Result> => {
+    const token = await customerAccessToken();
+    if (!token) return { success: false, message: 'Sua sessão expirou. Entre novamente.' };
+    const response = await fetch('/api/wallet/create-topup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ amount }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return { success: false, message: payload.error || 'Não foi possível gerar a recarga.' };
+    await refreshWallet();
+    return { success: true, message: 'Cobrança de recarga gerada.', payment: payload as WalletTopUpPayment };
+  };
+
+  const checkWalletTopUp = async (topUpId: string): Promise<Result> => {
+    const token = await customerAccessToken();
+    if (!token) return { success: false, message: 'Sua sessão expirou. Entre novamente.' };
+    const response = await fetch(`/api/wallet/topup-status?topUpId=${encodeURIComponent(topUpId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return { success: false, message: payload.error || 'Não foi possível consultar a recarga.' };
+    if (payload.topUpStatus === 'paid') await refreshWallet();
+    return { success: true, message: 'Recarga atualizada.', payment: payload as WalletTopUpPayment };
+  };
+
   const refreshCustomerOrders = async () => { if (customerUser) await loadCustomerData(); };
   const customerLogout = async () => {
     await supabase.auth.signOut();
     setCustomerUser(null);
     setOrders([]);
+    setWalletBalance(0);
+    setWalletTransactions([]);
+    setWalletTopUps([]);
     showToast('Sessão encerrada.', 'info');
   };
 
@@ -482,12 +602,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const removeCoupon = () => { setAppliedCoupon(null); showToast('Cupom removido.', 'info'); };
 
   const createOrder: StoreContextType['createOrder'] = async value => {
-    const { data, error } = await supabase.rpc('create_order', {
-      p_customer_name: normalizeCustomerName(value.customerName), p_customer_email: value.customerEmail,
-      p_customer_document: normalizeTaxId(value.customerDocument), p_shipping_address: value.shippingAddress || '',
-      p_payment_method: value.paymentMethod, p_cart: cart.map(item => ({ productId: item.product.id, quantity: item.quantity })),
-      p_coupon_code: appliedCoupon?.code || null,
-    });
+    const cartPayload = cart.map(item => ({ productId: item.product.id, quantity: item.quantity }));
+    const { data, error } = value.paymentMethod === 'wallet'
+      ? await supabase.rpc('create_wallet_order', {
+          p_shipping_address: value.shippingAddress || '',
+          p_cart: cartPayload,
+          p_coupon_code: appliedCoupon?.code || null,
+          p_idempotency_key: crypto.randomUUID(),
+        })
+      : await supabase.rpc('create_order', {
+          p_customer_name: normalizeCustomerName(value.customerName), p_customer_email: value.customerEmail,
+          p_customer_document: normalizeTaxId(value.customerDocument), p_shipping_address: value.shippingAddress || '',
+          p_payment_method: value.paymentMethod, p_cart: cartPayload,
+          p_coupon_code: appliedCoupon?.code || null,
+        });
     if (error || !data) { showToast(error?.message || 'Não foi possível criar o pedido.', 'error'); return null; }
     const order = orderFromRow(data); setOrders(previous => [order, ...previous]);
     setCustomerUser(previous => previous ? {
@@ -499,7 +627,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       clearCart();
       setIsCheckoutOpen(false);
     }
-    showToast('Pedido criado. Aguarde a confirmação do pagamento.'); return order;
+    if (value.paymentMethod === 'wallet') {
+      await refreshWallet();
+      showToast('Pagamento realizado com o saldo da carteira.');
+    } else {
+      showToast('Pedido criado. Aguarde a confirmação do pagamento.');
+    }
+    return order;
   };
   const updateOrderStatus = async (id: string, status: Order['status']) => {
     const { error } = await supabase.from('orders').update({ status }).eq('id', id);
@@ -527,7 +661,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return <StoreContext.Provider value={{
     selectedProduct, setSelectedProduct, isCartOpen, setIsCartOpen, isCheckoutOpen, setIsCheckoutOpen,
-    customerUser, customerLogin, requestCustomerCode, verifyCustomerCode, updateCustomerProfile, refreshCustomerOrders, customerLogout,
+    customerUser, customerLogin, requestCustomerCode, verifyCustomerCode, updateCustomerProfile,
+    walletBalance, walletTransactions, walletTopUps, refreshWallet, createWalletTopUp, checkWalletTopUp,
+    refreshCustomerOrders, customerLogout,
     isAdminAuthenticated, adminLogin, adminLogout,
     products, addProduct, updateProduct, deleteProduct, toggleProductStatus,
     collections, addCollection, updateCollection, deleteCollection,

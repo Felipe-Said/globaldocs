@@ -23,6 +23,12 @@ const signaturesMatch = (received, expected) => {
   return crypto.timingSafeEqual(Buffer.from(received), Buffer.from(expected));
 };
 
+const topupStatus = status => {
+  if (isPaidStatus(status)) return 'paid';
+  if (['failed', 'expired', 'refunded'].includes(status)) return status;
+  return 'pending';
+};
+
 export default async function handler(request, response) {
   if (request.method !== 'POST') return json(response, 405, { error: 'Método não permitido.' });
 
@@ -48,18 +54,45 @@ export default async function handler(request, response) {
       .select('payment_id,order_id')
       .eq('payment_id', paymentId)
       .eq('order_id', orderId)
-      .single();
-    if (!existing) return json(response, 404, { error: 'Pagamento desconhecido.' });
+      .maybeSingle();
 
     const status = String(body.payment_status || 'waiting');
-    await supabaseAdmin.from('nowpayments_payments').update({
+    if (existing) {
+      await supabaseAdmin.from('nowpayments_payments').update({
+        payment_status: status,
+        actually_paid: body.actually_paid || body.amount_received || 0,
+        raw_response: body,
+      }).eq('payment_id', paymentId);
+
+      if (isPaidStatus(status)) {
+        await supabaseAdmin.from('orders').update({ status: 'paid' }).eq('id', orderId).eq('payment_method', 'crypto');
+      }
+      return json(response, 200, { ok: true });
+    }
+
+    const topUpId = orderId.startsWith('wallet_topup:') ? orderId.slice('wallet_topup:'.length) : '';
+    const { data: topupPayment } = await supabaseAdmin
+      .from('wallet_topup_payments')
+      .select('payment_id,topup_id')
+      .eq('payment_id', paymentId)
+      .eq('topup_id', topUpId || '00000000-0000-0000-0000-000000000000')
+      .maybeSingle();
+    if (!topupPayment) return json(response, 404, { error: 'Pagamento desconhecido.' });
+
+    await supabaseAdmin.from('wallet_topup_payments').update({
       payment_status: status,
       actually_paid: body.actually_paid || body.amount_received || 0,
       raw_response: body,
     }).eq('payment_id', paymentId);
 
     if (isPaidStatus(status)) {
-      await supabaseAdmin.from('orders').update({ status: 'paid' }).eq('id', orderId).eq('payment_method', 'crypto');
+      const { error } = await supabaseAdmin.rpc('credit_wallet_topup', {
+        p_topup_id: topupPayment.topup_id,
+        p_provider_payment_id: paymentId,
+      });
+      if (error) throw error;
+    } else {
+      await supabaseAdmin.from('wallet_topups').update({ status: topupStatus(status) }).eq('id', topupPayment.topup_id);
     }
 
     return json(response, 200, { ok: true });

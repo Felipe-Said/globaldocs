@@ -3,12 +3,13 @@ import {
   AlertCircle, ArrowLeft, ArrowRight, Building2, Calendar, CheckCircle, Clock, Copy,
   CreditCard, Download, Eye, EyeOff, FileCheck, FileText, Key, LoaderCircle,
   LockKeyhole, Mail, Menu, PackageCheck, PanelLeftClose, PanelLeftOpen, RefreshCw,
-  Save, Search, ShieldCheck, ShoppingBag, UserRound,
+  Save, Search, ShieldCheck, ShoppingBag, TrendingDown, TrendingUp, UserRound, WalletCards,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useStore } from '../context/StoreContext';
+import { useStore, type WalletTopUpPayment } from '../context/StoreContext';
 import { formatTaxId } from '../lib/customer-profile';
 import { MonkeyLoginAvatar } from './MonkeyLoginAvatar';
+import { UsdtEstimate } from './UsdtEstimate';
 import { CustomerDashboardSidebar, type CustomerPanelView } from './ui/dashboard-sidebar';
 
 type AccessStep = 'email' | 'code';
@@ -18,6 +19,7 @@ export const MyDownloadsView: React.FC = () => {
   const {
     orders, downloadFile, customerUser, customerLogin, requestCustomerCode, verifyCustomerCode,
     updateCustomerProfile, refreshCustomerOrders, customerLogout, setIsCheckoutOpen,
+    walletBalance, walletTransactions, walletTopUps, refreshWallet, createWalletTopUp, checkWalletTopUp,
   } = useStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -39,6 +41,11 @@ export const MyDownloadsView: React.FC = () => {
   const [profileDocument, setProfileDocument] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileFeedback, setProfileFeedback] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
+  const [walletAmount, setWalletAmount] = useState('100');
+  const [walletPayment, setWalletPayment] = useState<WalletTopUpPayment | null>(null);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletFeedback, setWalletFeedback] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
+  const [walletAddressCopied, setWalletAddressCopied] = useState(false);
   const shouldReturnToCheckout = new URLSearchParams(location.search).get('return') === 'checkout';
 
   useEffect(() => {
@@ -47,6 +54,31 @@ export const MyDownloadsView: React.FC = () => {
     setProfileDocument(formatTaxId(customerUser.document || ''));
     if (!customerUser.name?.trim() || !customerUser.document?.trim()) setActiveView('profile');
   }, [customerUser]);
+
+  useEffect(() => {
+    if (!walletPayment || walletPayment.topUpStatus === 'paid' || ['failed', 'expired', 'refunded'].includes(walletPayment.topUpStatus)) return;
+    const poll = async () => {
+      const result = await checkWalletTopUp(walletPayment.topUpId);
+      if (!result.success || !result.payment) return;
+      setWalletPayment(result.payment);
+      if (result.payment.topUpStatus === 'paid') {
+        setWalletFeedback({ type: 'success', message: 'Recarga confirmada. O saldo já está disponível na sua carteira.' });
+      } else if (['failed', 'expired', 'refunded'].includes(result.payment.topUpStatus)) {
+        setWalletFeedback({ type: 'error', message: 'A cobrança não foi concluída. Gere uma nova recarga para tentar novamente.' });
+      }
+    };
+    const interval = window.setInterval(() => void poll(), 10000);
+    return () => window.clearInterval(interval);
+  }, [walletPayment?.topUpId, walletPayment?.topUpStatus]);
+
+  useEffect(() => {
+    if (activeView !== 'wallet' || walletPayment) return;
+    const pendingTopUp = walletTopUps.find(item => item.status === 'pending');
+    if (!pendingTopUp) return;
+    void checkWalletTopUp(pendingTopUp.id).then(result => {
+      if (result.success && result.payment) setWalletPayment(result.payment);
+    });
+  }, [activeView, walletPayment, walletTopUps]);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -139,6 +171,25 @@ export const MyDownloadsView: React.FC = () => {
       navigate('/', { replace: true });
       window.setTimeout(() => setIsCheckoutOpen(true), 0);
     }
+  };
+
+  const handleWalletTopUp = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const amount = Number(walletAmount.replace(',', '.'));
+    if (!Number.isFinite(amount) || amount < 1) {
+      setWalletFeedback({ type: 'error', message: 'Informe um valor válido para a recarga.' });
+      return;
+    }
+    setWalletLoading(true);
+    setWalletFeedback(null);
+    const result = await createWalletTopUp(amount);
+    setWalletLoading(false);
+    if (!result.success || !result.payment) {
+      setWalletFeedback({ type: 'error', message: result.message });
+      return;
+    }
+    setWalletPayment(result.payment);
+    setWalletFeedback({ type: 'info', message: 'Envie o valor exato para o endereço abaixo. O saldo será liberado após a confirmação on-chain.' });
   };
 
   const changeMode = (nextMode: AccessMode) => {
@@ -287,6 +338,7 @@ export const MyDownloadsView: React.FC = () => {
     orders: { eyebrow: 'Compras', title: 'Meus pedidos', description: 'Consulte pagamentos, valores e todos os itens vinculados à sua conta.' },
     downloads: { eyebrow: 'Minha biblioteca', title: 'Downloads e acessos', description: 'Baixe arquivos e consulte credenciais dos produtos que já foram liberados.' },
     profile: { eyebrow: 'Conta', title: 'Meu perfil', description: 'Confira os dados usados para identificar sua conta e vincular seus pedidos.' },
+    wallet: { eyebrow: 'Conta', title: 'Minha carteira', description: 'Adicione saldo, acompanhe movimentações e pague seus pedidos com mais rapidez.' },
   };
   const currentView = viewCopy[activeView];
   const currentNavigationLabel = activeView === 'overview' ? 'Visão geral' : currentView.title;
@@ -326,11 +378,12 @@ export const MyDownloadsView: React.FC = () => {
 
             {activeView === 'overview' && (
               <div className="space-y-6 animate-fadeIn">
-                <section aria-label="Resumo da conta" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <section aria-label="Resumo da conta" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   {[
                     { label: 'Pedidos realizados', value: myOrders.length, icon: ShoppingBag, color: 'bg-primary-tint text-primary-pressed', target: 'orders' as CustomerPanelView },
                     { label: 'Itens liberados', value: downloadCount, icon: Download, color: 'bg-emerald-100 text-emerald-700', target: 'downloads' as CustomerPanelView },
                     { label: 'Aguardando pagamento', value: pendingOrders.length, icon: Clock, color: 'bg-amber-100 text-amber-800', target: 'orders' as CustomerPanelView },
+                    { label: 'Saldo da carteira', value: walletBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), icon: WalletCards, color: 'bg-violet-100 text-violet-700', target: 'wallet' as CustomerPanelView },
                   ].map(card => (
                     <button key={card.label} type="button" onClick={() => selectView(card.target)} className="group min-h-[132px] cursor-pointer rounded-2xl border border-borderSoft bg-white p-5 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-notion-hover">
                       <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${card.color}`}><card.icon className="h-[18px] w-[18px]" aria-hidden="true" /></div>
@@ -368,6 +421,44 @@ export const MyDownloadsView: React.FC = () => {
                 {activeView === 'downloads' && (filteredDownloads.length === 0 ? (
                   <section className="rounded-2xl border border-borderSoft bg-white p-10 text-center"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-warm text-ink-muted"><Download className="h-6 w-6" aria-hidden="true" /></div><h2 className="font-semibold text-ink">Nenhum item liberado</h2><p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">{filterQuery ? 'Nenhum download corresponde à sua busca.' : 'Seus arquivos aparecerão aqui após a confirmação do pagamento.'}</p></section>
                 ) : <div className="grid gap-4 xl:grid-cols-2">{filteredDownloads.map(({ order, item, index }) => <article key={`${order.id}-${item.productId}-${index}`} className="flex flex-col rounded-2xl border border-borderSoft bg-white p-5 shadow-xs"><div className="mb-4 flex items-start gap-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-tint text-primary"><FileText className="h-5 w-5" aria-hidden="true" /></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="font-bold text-ink">{item.productTitle}</h2>{getItemTypeBadge(item.productType)}</div><p className="mt-1 truncate font-mono text-[10px] text-ink-muted">Pedido {order.id}</p></div></div>{(item.zipFileName || item.downloadFileName) && <p className="mb-4 break-all rounded-lg bg-surface-warm p-2.5 font-mono text-[11px] text-ink-muted">{item.zipFileName || item.downloadFileName}</p>}{(item.accessLogins || item.proxyDetails) && <div className="mb-4 space-y-2 border-t border-borderSoft pt-4"><p className="flex items-center gap-1.5 text-[11px] font-bold text-ink"><Key className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> Credenciais liberadas</p>{[['Acesso', item.accessLogins], ['Proxy', item.proxyDetails]].filter(([, value]) => value).map(([label, value]) => { const copyId = `${label}-${order.id}-${index}`; return <div key={label} className="flex items-center justify-between gap-2 rounded-lg border border-borderSoft bg-surface-warm p-2.5 font-mono text-xs"><p className="min-w-0 break-all text-ink"><span className="text-ink-muted">{label}: </span>{value}</p><button type="button" onClick={() => void handleCopy(value || '', copyId)} aria-label={`Copiar ${label.toLowerCase()}`} className="flex min-h-10 shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-borderSoft bg-white px-2.5 text-[10px] font-semibold text-ink hover:bg-surface-warm">{copiedKey === copyId ? <CheckCircle className="h-3 w-3 text-emerald-600" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}{copiedKey === copyId ? 'Copiado' : 'Copiar'}</button></div>; })}</div>}<button type="button" onClick={() => downloadFile(item.productTitle, item.zipFileName || item.downloadFileName, item.format)} className="mt-auto flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-xs font-semibold text-white transition-colors hover:bg-primary-pressed"><Download className="h-4 w-4" aria-hidden="true" /> Baixar arquivo</button></article>)}</div>)}
+              </div>
+            )}
+
+            {activeView === 'wallet' && (
+              <div className="space-y-5 animate-fadeIn">
+                <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+                  <section className="relative overflow-hidden rounded-2xl bg-ink p-6 text-white shadow-notion-card sm:p-7">
+                    <div className="absolute -right-12 -top-16 h-52 w-52 rounded-full bg-primary/25 blur-3xl" aria-hidden="true" />
+                    <div className="relative">
+                      <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/55">Saldo disponível</p><p className="mt-3 text-4xl font-bold tracking-tight tabular-nums">{walletBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10"><WalletCards className="h-6 w-6" aria-hidden="true" /></div></div>
+                      <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4"><p className="max-w-md text-xs leading-relaxed text-white/60">Use o saldo para pagar instantaneamente quando o valor disponível for suficiente para o pedido.</p><button type="button" onClick={() => void refreshWallet()} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-white/10 px-4 text-xs font-semibold text-white transition-colors hover:bg-white/15"><RefreshCw className="h-4 w-4" aria-hidden="true" /> Atualizar saldo</button></div>
+                    </div>
+                  </section>
+
+                  <section className="rounded-2xl border border-borderSoft bg-white p-5 shadow-xs">
+                    <h2 className="font-bold text-ink">Adicionar saldo</h2><p className="mt-1 text-xs leading-relaxed text-ink-muted">A recarga é convertida para reais e creditada após a confirmação do pagamento.</p>
+                    {!walletPayment || ['paid', 'failed', 'expired', 'refunded'].includes(walletPayment.topUpStatus) ? (
+                      <form onSubmit={handleWalletTopUp} className="mt-5 space-y-4">
+                        <div><label htmlFor="wallet-amount" className="mb-2 block text-xs font-semibold text-ink">Valor da recarga</label><div className="relative"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-ink-muted">R$</span><input id="wallet-amount" type="number" inputMode="decimal" min="1" max="100000" step="0.01" required value={walletAmount} onChange={event => setWalletAmount(event.target.value)} className="min-h-12 w-full rounded-xl border border-borderSoft bg-surface-warm py-3 pl-10 pr-3 text-base font-semibold tabular-nums text-ink outline-none transition-colors focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15" /></div></div>
+                        <div className="grid grid-cols-3 gap-2">{[50, 100, 250].map(amount => <button key={amount} type="button" onClick={() => setWalletAmount(String(amount))} className="min-h-10 cursor-pointer rounded-lg border border-borderSoft bg-surface-warm text-xs font-semibold text-ink transition-colors hover:border-primary hover:text-primary">R$ {amount}</button>)}</div>
+                        {Number(walletAmount) > 0 && <UsdtEstimate amount={Number(walletAmount)} compact />}
+                        <button type="submit" disabled={walletLoading} className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-pressed disabled:cursor-wait disabled:opacity-60">{walletLoading ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <WalletCards className="h-4 w-4" aria-hidden="true" />}{walletLoading ? 'Gerando cobrança...' : 'Adicionar saldo via USDT'}</button>
+                      </form>
+                    ) : (
+                      <div className="mt-5 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-950">
+                        <div className="flex items-center justify-between gap-3"><span className="text-amber-800">Valor exato</span><strong className="font-mono text-sm">{walletPayment.payAmount} {walletPayment.payCurrency?.toUpperCase()}</strong></div>
+                        <div><p className="mb-1 text-[11px] text-amber-800">Endereço exclusivo</p><div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-white p-2.5"><span className="min-w-0 flex-1 break-all font-mono text-[10px] text-ink">{walletPayment.payAddress}</span><button type="button" onClick={() => { void navigator.clipboard.writeText(walletPayment.payAddress); setWalletAddressCopied(true); window.setTimeout(() => setWalletAddressCopied(false), 2000); }} className="flex min-h-10 shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2 text-[10px] font-semibold text-amber-900 hover:bg-amber-50"><Copy className="h-3.5 w-3.5" aria-hidden="true" /> {walletAddressCopied ? 'Copiado' : 'Copiar'}</button></div></div>
+                        <div role="status" aria-live="polite" className="flex items-center gap-2 text-[11px] text-amber-800"><RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Aguardando confirmação do pagamento...</div>
+                      </div>
+                    )}
+                    {walletFeedback && <div role={walletFeedback.type === 'error' ? 'alert' : 'status'} className={`mt-4 flex items-start gap-2 rounded-xl border p-3 text-xs ${walletFeedback.type === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : walletFeedback.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-blue-200 bg-blue-50 text-blue-800'}`}>{walletFeedback.type === 'error' ? <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" /> : <CheckCircle className="h-4 w-4 shrink-0" aria-hidden="true" />}<span>{walletFeedback.message}</span></div>}
+                  </section>
+                </div>
+
+                <section className="overflow-hidden rounded-2xl border border-borderSoft bg-white shadow-xs">
+                  <div className="flex items-center justify-between border-b border-borderSoft px-5 py-4"><div><h2 className="font-bold text-ink">Extrato da carteira</h2><p className="mt-1 text-xs text-ink-muted">Créditos e pagamentos realizados com seu saldo.</p></div><span className="text-[11px] font-medium text-ink-muted">{walletTransactions.length} movimentações</span></div>
+                  {walletTransactions.length === 0 ? <div className="p-10 text-center"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-warm text-ink-muted"><WalletCards className="h-6 w-6" aria-hidden="true" /></div><h3 className="font-semibold text-ink">Nenhuma movimentação</h3><p className="mt-1 text-xs text-ink-muted">Suas recargas e compras com saldo aparecerão aqui.</p></div> : <div className="divide-y divide-borderSoft">{walletTransactions.map(transaction => <article key={transaction.id} className="flex items-center gap-3 px-5 py-4"><div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${transaction.type === 'credit' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{transaction.type === 'credit' ? <TrendingUp className="h-4 w-4" aria-hidden="true" /> : <TrendingDown className="h-4 w-4" aria-hidden="true" />}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-ink">{transaction.description}</p><p className="mt-1 text-[11px] text-ink-muted">{new Date(transaction.createdAt).toLocaleString('pt-BR')}</p></div><div className="text-right"><p className={`text-sm font-bold tabular-nums ${transaction.type === 'credit' ? 'text-emerald-700' : 'text-rose-700'}`}>{transaction.type === 'credit' ? '+' : '-'} {transaction.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p><p className="mt-1 text-[10px] text-ink-muted">Saldo {transaction.balanceAfter.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div></article>)}</div>}
+                </section>
               </div>
             )}
 

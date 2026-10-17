@@ -72,7 +72,7 @@ export interface CartItem {
   quantity: number;
 }
 
-export type PaymentMethod = 'pix' | 'credit_card' | 'boleto' | 'crypto';
+export type PaymentMethod = 'pix' | 'credit_card' | 'boleto' | 'crypto' | 'wallet';
 
 export type OrderStatus = 'paid' | 'pending' | 'cancelled';
 

@@ -40,6 +40,14 @@ export const requireAdmin = async request => {
   return membership ? userData.user : null;
 };
 
+export const requireCustomer = async request => {
+  const authorization = request.headers.authorization || '';
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  if (!token) return null;
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  return error ? null : data.user;
+};
+
 export const getNowPaymentsSettings = async () => {
   const { data, error } = await supabaseAdmin
     .from('nowpayments_settings')

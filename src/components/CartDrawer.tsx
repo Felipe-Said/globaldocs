@@ -29,7 +29,8 @@ import {
   Truck,
   ExternalLink,
   Coins,
-  RefreshCw
+  RefreshCw,
+  WalletCards
 } from 'lucide-react';
 
 export type CartPhase = 'cart' | 'customer' | 'payment' | 'success';
@@ -71,6 +72,7 @@ export const CartDrawer: React.FC = () => {
     settings,
     showToast,
     customerUser,
+    walletBalance,
   } = useStore();
 
   const navigate = useNavigate();
@@ -160,6 +162,7 @@ export const CartDrawer: React.FC = () => {
         setPaymentAvailability(data);
         setCryptoGateway(data.crypto);
         const available: PaymentMethod[] = [
+          ...(walletBalance >= total && total > 0 ? ['wallet' as PaymentMethod] : []),
           ...(data.pix.enabled ? ['pix' as PaymentMethod] : []),
           ...(data.card.enabled ? ['credit_card' as PaymentMethod] : []),
           ...(data.crypto.enabled ? ['crypto' as PaymentMethod] : []),
@@ -171,7 +174,7 @@ export const CartDrawer: React.FC = () => {
         setCryptoGateway(value => ({ ...value, enabled: false }));
       })
       .finally(() => setPaymentMethodsLoading(false));
-  }, [isCartOpen]);
+  }, [isCartOpen, walletBalance, total]);
 
   // Se o carrinho ficar vazio e ainda estiver nas fases de compra, voltar para 'cart'
   useEffect(() => {
@@ -321,6 +324,11 @@ export const CartDrawer: React.FC = () => {
       showToast('Nenhum método de pagamento está ativo no momento.', 'error');
       return;
     }
+    if (paymentMethod === 'wallet' && walletBalance < total) {
+      showToast('O saldo da carteira é insuficiente para este pedido.', 'error');
+      setPaymentMethod(null);
+      return;
+    }
 
     setCheckoutBtnState('loading');
     const pendingItems = (completedOrder?.items || []) as Array<{ productId: string; quantity?: number }>;
@@ -387,14 +395,22 @@ export const CartDrawer: React.FC = () => {
     setTimeout(() => setCopiedToken(false), 2500);
   };
 
-  const availablePaymentCount = Number(paymentAvailability.pix.enabled)
+  const walletCanPay = Boolean(customerUser && total > 0 && walletBalance >= total);
+  const visiblePaymentCount = Number(Boolean(customerUser))
+    + Number(paymentAvailability.pix.enabled)
     + Number(paymentAvailability.card.enabled)
     + Number(paymentAvailability.crypto.enabled);
-  const paymentGridColumns = availablePaymentCount <= 1
+  const availablePaymentCount = Number(walletCanPay)
+    + Number(paymentAvailability.pix.enabled)
+    + Number(paymentAvailability.card.enabled)
+    + Number(paymentAvailability.crypto.enabled);
+  const paymentGridColumns = visiblePaymentCount <= 1
     ? 'grid-cols-1'
-    : availablePaymentCount === 2
+    : visiblePaymentCount === 2
       ? 'grid-cols-2'
-      : 'grid-cols-3';
+      : visiblePaymentCount === 3
+        ? 'grid-cols-3'
+        : 'grid-cols-2 sm:grid-cols-4';
   const cryptoIsOnlyPayment = availablePaymentCount === 1 && paymentAvailability.crypto.enabled;
   const cryptoQuotePending = cryptoIsOnlyPayment && !cartQuote;
   const cryptoQuoteUnavailable = cryptoIsOnlyPayment && Boolean(cartQuote?.error);
@@ -844,6 +860,23 @@ export const CartDrawer: React.FC = () => {
                 
                 {/* Seletor de Métodos com Logos Oficiais Sem Bordas */}
                 <div className={`grid ${paymentGridColumns} gap-2`}>
+                  {customerUser && <button
+                    type="button"
+                    aria-pressed={paymentMethod === 'wallet'}
+                    disabled={!walletCanPay}
+                    onClick={() => walletCanPay && setPaymentMethod('wallet')}
+                    className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 ${
+                      paymentMethod === 'wallet'
+                        ? 'border-black bg-gray-50 font-semibold shadow-xs cursor-pointer'
+                        : walletCanPay
+                          ? 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600 cursor-pointer'
+                          : 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed opacity-65'
+                    }`}
+                  >
+                    <WalletCards className="h-5 w-5" aria-hidden="true" />
+                    <span className="text-xs">Saldo</span>
+                    <span className={`whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${walletCanPay ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}>{walletBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                  </button>}
                   {paymentAvailability.pix.enabled && <button
                     type="button"
                     aria-pressed={paymentMethod === 'pix'}
@@ -927,6 +960,15 @@ export const CartDrawer: React.FC = () => {
                 {!paymentMethodsLoading && availablePaymentCount === 0 && (
                   <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center text-xs leading-relaxed text-amber-900">
                     Nenhum método de pagamento está ativo no momento. Entre em contato com o suporte ou tente novamente mais tarde.
+                  </div>
+                )}
+
+                {/* Conteúdo: PIX */}
+                {paymentMethod === 'wallet' && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-950 animate-fadeIn">
+                    <div className="flex items-center gap-2 font-bold text-emerald-900"><WalletCards className="h-4 w-4" aria-hidden="true" /> Pagamento com saldo</div>
+                    <div className="mt-3 space-y-2 rounded-lg border border-emerald-200 bg-white p-3"><div className="flex items-center justify-between gap-3"><span className="text-emerald-800">Saldo atual</span><strong>{formatPrice(walletBalance)}</strong></div><div className="flex items-center justify-between gap-3"><span className="text-emerald-800">Valor do pedido</span><strong>- {formatPrice(total)}</strong></div><div className="flex items-center justify-between gap-3 border-t border-emerald-100 pt-2"><span className="font-semibold text-emerald-900">Saldo restante</span><strong className="text-sm">{formatPrice(walletBalance - total)}</strong></div></div>
+                    <p className="mt-3 text-[11px] leading-relaxed text-emerald-800">A confirmação é imediata e os itens digitais são liberados assim que o pedido é concluído.</p>
                   </div>
                 )}
 
@@ -1135,7 +1177,9 @@ export const CartDrawer: React.FC = () => {
                         : 'opacity-0 -translate-y-5 pointer-events-none'
                     }`}
                   >
-                    <span>{paymentMethod === 'crypto'
+                    <span>{paymentMethod === 'wallet'
+                      ? `Pagar com saldo (${formatPrice(total)})`
+                      : paymentMethod === 'crypto'
                       ? `Gerar cobrança em USDT (${formatPrice(total)})`
                       : paymentMethod
                         ? `Confirmar e Finalizar Compra (${formatPrice(total)})`
@@ -1172,13 +1216,16 @@ export const CartDrawer: React.FC = () => {
                 <div className="space-y-1.5 text-center">
                   <div className="flex items-center justify-center gap-1.5 text-xs text-gray-500">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>{paymentMethod === 'crypto'
+                    <span>{paymentMethod === 'wallet'
+                      ? 'Pagamento instantâneo com o saldo da sua carteira'
+                      : paymentMethod === 'crypto'
                       ? 'Liberação após confirmação do pagamento na blockchain'
                       : 'Pagamento protegido e liberação após confirmação'}</span>
                   </div>
 
                   {/* Gateways Trust Bar Sem Bordas */}
                   <div className="flex items-center justify-center gap-3 pt-0.5 opacity-80">
+                    {customerUser && <WalletCards className="h-4 w-4 text-ink" aria-label="Saldo da carteira" />}
                     {paymentAvailability.pix.enabled && <img src={GATEWAY_LOGOS.pix} alt="Pix" className="h-3.5 w-auto object-contain" style={{ border: 'none' }} />}
                     {paymentAvailability.card.enabled && <>
                       <img src={GATEWAY_LOGOS.visa} alt="Visa" className="h-2.5 w-auto object-contain" style={{ border: 'none' }} />

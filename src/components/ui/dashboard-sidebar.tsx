@@ -6,10 +6,11 @@ import {
   ReceiptText,
   ShoppingBag,
   UserRound,
+  WalletCards,
   X,
 } from 'lucide-react';
 
-export type CustomerPanelView = 'overview' | 'orders' | 'downloads' | 'profile';
+export type CustomerPanelView = 'overview' | 'orders' | 'downloads' | 'wallet' | 'profile';
 
 type DashboardSidebarProps = {
   activeView: CustomerPanelView;
@@ -46,7 +47,10 @@ const groups: Array<{ heading: string; items: SidebarItem[] }> = [
   },
   {
     heading: 'Conta',
-    items: [{ id: 'profile', title: 'Meu perfil', icon: UserRound }],
+    items: [
+      { id: 'wallet', title: 'Minha carteira', icon: WalletCards },
+      { id: 'profile', title: 'Meu perfil', icon: UserRound },
+    ],
   },
 ];
 

@@ -203,7 +203,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
                       {formatPrice(order.total)}
                     </td>
                     <td className="py-3 px-4 uppercase text-[11px] font-medium text-ink-muted">
-                      {order.paymentMethod}
+                      {order.paymentMethod === 'wallet' ? 'Carteira' : order.paymentMethod}
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
