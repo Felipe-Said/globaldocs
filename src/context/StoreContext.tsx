@@ -634,10 +634,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const token = await customerAccessToken();
       if (token) {
         try {
-          const fulfillmentResponse = await fetch('/api/nppr/fulfill-order', {
+          const fulfillmentResponse = await fetch('/api/nppr', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ orderId: order.id }),
+            body: JSON.stringify({ action: 'fulfill', orderId: order.id }),
           });
           if (fulfillmentResponse.ok) await loadCustomerData();
         } catch {

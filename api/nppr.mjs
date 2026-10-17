@@ -1,5 +1,5 @@
-import { json, readBody, requireAdmin, supabaseAdmin } from '../../server/nowpayments.mjs';
-import { callNppr, getNpprSettings, syncNpprCatalog } from '../../server/nppr.mjs';
+import { json, readBody, requireAdmin, requireCustomer, supabaseAdmin } from '../server/nowpayments.mjs';
+import { callNppr, fulfillNpprOrder, getNpprSettings, syncNpprCatalog } from '../server/nppr.mjs';
 
 const publicSettings = settings => ({
   enabled: settings.enabled,
@@ -15,11 +15,20 @@ const publicSettings = settings => ({
 
 export default async function handler(request, response) {
   try {
+    const body = readBody(request);
+    if (request.method === 'POST' && body.action === 'fulfill') {
+      const customer = await requireCustomer(request);
+      if (!customer) return json(response, 401, { error: 'Sessão do cliente inválida.' });
+      const orderId = String(body.orderId || '');
+      const { data: order } = await supabaseAdmin.from('orders').select('id').eq('id', orderId).eq('customer_user_id', customer.id).eq('status', 'paid').maybeSingle();
+      if (!order) return json(response, 404, { error: 'Pedido pago não encontrado.' });
+      return json(response, 200, await fulfillNpprOrder(order.id));
+    }
+
     if (!await requireAdmin(request)) return json(response, 401, { error: 'Sessão administrativa inválida.' });
     const current = await getNpprSettings();
     if (request.method === 'GET') return json(response, 200, publicSettings(current));
     if (request.method !== 'POST') return json(response, 405, { error: 'Método não permitido.' });
-    const body = readBody(request);
     const apiKey = String(body.apiKey || '').trim() || current.api_key;
 
     if (body.action === 'test') {
@@ -43,18 +52,17 @@ export default async function handler(request, response) {
     if (!apiKey) return json(response, 400, { error: 'Informe a API Key da NPPR Team.' });
     if (!Number.isFinite(usdBrlRate) || usdBrlRate <= 0) return json(response, 400, { error: 'Informe uma cotação USD/BRL válida.' });
     if (!Number.isFinite(markupPercent) || markupPercent < 0 || markupPercent > 1000) return json(response, 400, { error: 'A margem deve ficar entre 0% e 1000%.' });
-    const next = {
+    const { data, error } = await supabaseAdmin.from('nppr_settings').update({
       api_key: apiKey,
       enabled: Boolean(body.enabled),
       auto_fulfill: Boolean(body.autoFulfill),
       publish_products: Boolean(body.publishProducts),
       usd_brl_rate: usdBrlRate,
       markup_percent: markupPercent,
-    };
-    const { data, error } = await supabaseAdmin.from('nppr_settings').update(next).eq('id', 1).select('*').single();
+    }).eq('id', 1).select('*').single();
     if (error) throw error;
     return json(response, 200, { success: true, ...publicSettings(data), message: 'Configuração da NPPR Team salva.' });
   } catch (error) {
-    return json(response, error.status || 500, { error: error.message || 'Falha ao configurar a NPPR Team.' });
+    return json(response, error.status || 500, { error: error.message || 'Falha na integração com a NPPR Team.' });
   }
 }

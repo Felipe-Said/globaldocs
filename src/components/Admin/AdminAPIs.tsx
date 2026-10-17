@@ -207,7 +207,7 @@ export const AdminAPIs: React.FC = () => {
       });
       if (resendResponse.ok) setResend(await resendResponse.json());
 
-      const npprResponse = await fetch('/api/admin/nppr-config', {
+      const npprResponse = await fetch('/api/nppr', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (npprResponse.ok) setNppr(await npprResponse.json());
@@ -218,7 +218,7 @@ export const AdminAPIs: React.FC = () => {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     if (!token) throw new Error('Sua sessão administrativa expirou.');
-    const response = await fetch('/api/admin/nppr-config', {
+    const response = await fetch('/api/nppr', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
