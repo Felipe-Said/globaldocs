@@ -32,6 +32,10 @@ const flattenProducts = payload => Object.entries(payload || {}).flatMap(([categ
 );
 
 const money = value => Math.round(Number(value) * 100) / 100;
+const publicLabel = value => String(value || '')
+  .replace(/\bNPPR(?:\s+Team)?\b/gi, '')
+  .replace(/\s{2,}/g, ' ')
+  .trim();
 
 const readAllSupplierProducts = async () => {
   const rows = [];
@@ -65,7 +69,7 @@ export const syncNpprCatalog = async settings => {
     .flatMap(product => [String(product.category)]));
   const collectionRows = (Array.isArray(categories) ? categories : []).map(category => {
     const supplierCollectionId = String(category.slug || category.id);
-    const name = category.titleEn || category.titleRu || supplierCollectionId;
+    const name = publicLabel(category.titleEn || category.titleRu || supplierCollectionId) || 'Produtos Digitais';
     return {
       supplier: 'nppr',
       supplier_collection_id: supplierCollectionId,
@@ -74,7 +78,7 @@ export const syncNpprCatalog = async settings => {
       )),
       data: {
         name,
-        slug: `nppr-${slugify(category.slug || name || category.id)}`,
+        slug: `catalogo-${slugify(publicLabel(category.slug) || name || category.id)}`,
         description: `Produtos da coleção ${name}, com estoque e preços sincronizados automaticamente.`,
         badgeColor: 'bg-blue-50 text-blue-800 border-blue-200',
         supplier: 'nppr',
@@ -115,12 +119,13 @@ export const syncNpprCatalog = async settings => {
     const minimumOrder = Math.max(1, Number(source.minimalOrder || 1));
     const quantity = Math.max(0, Number(source.qty || 0));
     const salePrice = money(Number(source.priceUsd) * Number(settings.usd_brl_rate) * (1 + Number(settings.markup_percent) / 100));
-    const categoryTitle = categoryNames.get(String(source.category)) || String(source.category || 'Catálogo NPPR');
+    const categoryTitle = publicLabel(categoryNames.get(String(source.category)) || source.category || 'Catálogo Digital') || 'Catálogo Digital';
+    const productTitle = publicLabel(source.titleEn || source.titleRu || `Produto ${supplierProductId}`) || `Produto ${supplierProductId}`;
     const generated = {
       ...(current?.data || {}),
-      title: source.titleEn || source.titleRu || `Produto ${supplierProductId}`,
+      title: productTitle,
       tagline: `Entrega digital • ${categoryTitle}`,
-      description: source.titleEn || source.titleRu || 'Produto digital fornecido sob demanda.',
+      description: productTitle || 'Produto digital fornecido sob demanda.',
       category: 'Contas Digitais',
       productType: 'contas',
       deliveryType: 'digital',
@@ -133,7 +138,7 @@ export const syncNpprCatalog = async settings => {
       unlimitedStock: false,
       stockQuantity: quantity,
       minimumOrder,
-      tags: ['NPPR', categoryTitle],
+      tags: [categoryTitle],
       features: [`Pedido mínimo: ${minimumOrder}`, `Estoque sincronizado: ${quantity}`],
       downloadFileName: '',
       rating: Number(current?.data?.rating || 5),
