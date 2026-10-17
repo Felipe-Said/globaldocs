@@ -16,7 +16,7 @@ export function Dashboard() {
 				</p>
 			</div>
 			<div className="rounded-lg overflow-hidden border bg-background shadow-xs">
-				<div className="grid grid-cols-1 gap-px bg-border lg:grid-cols-3">
+				<div className="grid grid-cols-1 gap-px bg-border sm:grid-cols-2 xl:grid-cols-4">
 					<DashboardStats />
 					<DashboardInvoices />
 				</div>
