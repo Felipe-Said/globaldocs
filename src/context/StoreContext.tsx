@@ -127,6 +127,18 @@ const splitProduct = (product: Partial<DigitalProduct>) => {
   return { publicData, deliverable };
 };
 
+const readAllProducts = async () => {
+  const rows: any[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const result = await supabase.from('products').select('*').order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+    if (result.error) return { data: rows, error: result.error };
+    rows.push(...(result.data || []));
+    if (!result.data || result.data.length < pageSize) break;
+  }
+  return { data: rows, error: null };
+};
+
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<DigitalProduct[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -183,7 +195,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     const [productResult, collectionResult, bannerResult, settingsResult] = await Promise.all([
-      supabase.from('products').select('*').order('created_at', { ascending: false }),
+      readAllProducts(),
       supabase.from('collections').select('*').order('created_at'),
       supabase.from('banners').select('*').order('sort_order'),
       supabase.from('store_settings').select('data').eq('id', 1).maybeSingle(),
@@ -250,7 +262,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const loadAdminData = async () => {
     const [productResult, collectionResult, bannerResult, settingsResult, deliverableResult, orderResult, couponResult] = await Promise.all([
-      supabase.from('products').select('*').order('created_at', { ascending: false }),
+      readAllProducts(),
       supabase.from('collections').select('*').order('created_at'),
       supabase.from('banners').select('*').order('sort_order'),
       supabase.from('store_settings').select('data').eq('id', 1).maybeSingle(),

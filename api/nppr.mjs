@@ -13,20 +13,33 @@ const publicSettings = settings => ({
   lastSyncAt: settings.last_sync_at,
 });
 
+const readAllActiveProducts = async () => {
+  const rows = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabaseAdmin.from('products').select('*')
+      .eq('active', true).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
+};
+
 export default async function handler(request, response) {
   try {
     const body = readBody(request);
     if (request.method === 'GET' && request.query.action === 'catalog') {
-      const [products, collections, banners, settings] = await Promise.all([
-        supabaseAdmin.from('products').select('*').eq('active', true).order('created_at', { ascending: false }),
+      const [productRows, collections, banners, settings] = await Promise.all([
+        readAllActiveProducts(),
         supabaseAdmin.from('collections').select('*').eq('active', true).order('created_at'),
         supabaseAdmin.from('banners').select('*').eq('active', true).order('sort_order'),
         supabaseAdmin.from('store_settings').select('data').eq('id', 1).maybeSingle(),
       ]);
-      const catalogError = products.error || collections.error || banners.error || settings.error;
+      const catalogError = collections.error || banners.error || settings.error;
       if (catalogError) throw catalogError;
       return json(response, 200, {
-        products: products.data || [],
+        products: productRows,
         collections: collections.data || [],
         banners: banners.data || [],
         settings: settings.data?.data || {},

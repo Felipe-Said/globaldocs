@@ -33,6 +33,20 @@ const flattenProducts = payload => Object.entries(payload || {}).flatMap(([categ
 
 const money = value => Math.round(Number(value) * 100) / 100;
 
+const readAllSupplierProducts = async () => {
+  const rows = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabaseAdmin.from('products')
+      .select('id,data,featured,supplier_product_id').eq('supplier', 'nppr')
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
+};
+
 const slugify = value => String(value || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -81,10 +95,8 @@ export const syncNpprCatalog = async settings => {
     collectionIdBySupplierId.set(String(category.id), collectionId);
     collectionIdBySupplierId.set(String(category.slug), collectionId);
   }
-  const { data: existing, error: existingError } = await supabaseAdmin
-    .from('products').select('id,data,featured,supplier_product_id').eq('supplier', 'nppr');
-  if (existingError) throw existingError;
-  const existingBySupplierId = new Map((existing || []).map(row => [String(row.supplier_product_id), row]));
+  const existing = await readAllSupplierProducts();
+  const existingBySupplierId = new Map(existing.map(row => [String(row.supplier_product_id), row]));
   const categoryNames = new Map((Array.isArray(categories) ? categories : []).map(category => [
     String(category.slug || category.id), category.titleEn || category.titleRu || category.slug,
   ]));
