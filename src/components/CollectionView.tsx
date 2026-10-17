@@ -65,7 +65,7 @@ export const CollectionView: React.FC = () => {
   // Produtos que pertencem a esta coleção
   const collectionProducts = useMemo(() => {
     if (!collection) return [];
-    return products.filter(p => p.active && p.collectionId === collection.id);
+    return products.filter(p => p.collectionId === collection.id);
   }, [collection, products]);
 
   // Produtos filtrados e ordenados

@@ -29,7 +29,10 @@ export const ProductGrid: React.FC = () => {
     setSelectedFormat
   } = useStore();
 
-  const activeProducts = products.filter(p => p.active);
+  // A API pública e as políticas RLS já retornam somente itens ativos. Manter a
+  // coleção recebida evita que uma sessão administrativa reclassifique os cards
+  // durante a hidratação e faça a vitrine parecer vazia.
+  const activeProducts = products;
   const activeCollections = collections.filter(c => c.active);
 
   // =========================================================================
