@@ -7,6 +7,7 @@ import {
   publicPayment,
   supabaseAdmin,
 } from '../../server/nowpayments.mjs';
+import { fulfillNpprOrder } from '../../server/nppr.mjs';
 
 export default async function handler(request, response) {
   if (request.method !== 'GET') return json(response, 405, { error: 'Método não permitido.' });
@@ -56,6 +57,7 @@ export default async function handler(request, response) {
     if (isPaidStatus(status) && order.status !== 'paid') {
       await supabaseAdmin.from('orders').update({ status: 'paid' }).eq('id', order.id);
     }
+    if (paid) await fulfillNpprOrder(order.id);
 
     let paidOrder;
     if (paid) {

@@ -14,7 +14,9 @@ import {
   Sliders,
   Sparkles,
   MailCheck,
-  LoaderCircle
+  LoaderCircle,
+  PackageSearch,
+  ArrowDownToLine
 } from 'lucide-react';
 
 import { GATEWAY_LOGOS } from '../../utils/gatewayLogos';
@@ -172,6 +174,20 @@ export const AdminAPIs: React.FC = () => {
   });
   const [resendApiKey, setResendApiKey] = useState('');
   const [savingResend, setSavingResend] = useState(false);
+  const [nppr, setNppr] = useState({
+    enabled: false,
+    autoFulfill: false,
+    publishProducts: false,
+    usdBrlRate: 5.5,
+    markupPercent: 30,
+    hasApiKey: false,
+    apiKeyHint: '',
+    lastTestedAt: null as string | null,
+    lastSyncAt: null as string | null,
+  });
+  const [npprApiKey, setNpprApiKey] = useState('');
+  const [savingNppr, setSavingNppr] = useState(false);
+  const [syncingNppr, setSyncingNppr] = useState(false);
 
   useEffect(() => {
     void supabase.from('integration_settings').select('data').eq('id', 1).maybeSingle().then(({ data, error }) => {
@@ -190,8 +206,62 @@ export const AdminAPIs: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (resendResponse.ok) setResend(await resendResponse.json());
+
+      const npprResponse = await fetch('/api/admin/nppr-config', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (npprResponse.ok) setNppr(await npprResponse.json());
     });
   }, []);
+
+  const npprRequest = async (body: Record<string, unknown>) => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error('Sua sessão administrativa expirou.');
+    const response = await fetch('/api/admin/nppr-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Falha na integração com a NPPR Team.');
+    return result;
+  };
+
+  const handleSaveNppr = async () => {
+    setSavingNppr(true);
+    setTestResult(null);
+    try {
+      const result = await npprRequest({ ...nppr, apiKey: npprApiKey });
+      setNppr(result);
+      setNpprApiKey('');
+      setTestResult({ id: 'nppr', success: true, message: result.message });
+      showToast('Integração com o fornecedor salva.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao salvar a integração.';
+      setTestResult({ id: 'nppr', success: false, message });
+      showToast(message, 'error');
+    } finally {
+      setSavingNppr(false);
+    }
+  };
+
+  const handleSyncNppr = async () => {
+    setSyncingNppr(true);
+    setTestResult(null);
+    try {
+      const result = await npprRequest({ action: 'sync' });
+      setNppr(value => ({ ...value, lastSyncAt: new Date().toISOString() }));
+      setTestResult({ id: 'nppr', success: true, message: result.message });
+      showToast('Catálogo do fornecedor sincronizado.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao sincronizar o catálogo.';
+      setTestResult({ id: 'nppr', success: false, message });
+      showToast(message, 'error');
+    } finally {
+      setSyncingNppr(false);
+    }
+  };
 
   const handleSaveResend = async () => {
     setSavingResend(true);
@@ -260,6 +330,23 @@ export const AdminAPIs: React.FC = () => {
   };
 
   const handleTestConnection = async (apiId: string) => {
+    if (apiId === 'nppr') {
+      setTestingConnection(apiId);
+      setTestResult(null);
+      try {
+        const result = await npprRequest({ action: 'test', apiKey: npprApiKey });
+        setTestResult({ id: apiId, success: true, message: result.message });
+        showToast('Credencial e saldo do fornecedor validados.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Falha ao testar o fornecedor.';
+        setTestResult({ id: apiId, success: false, message });
+        showToast(message, 'error');
+      } finally {
+        setTestingConnection(null);
+      }
+      return;
+    }
+
     if (apiId === 'resend') {
       setTestingConnection(apiId);
       setTestResult(null);
@@ -375,6 +462,87 @@ export const AdminAPIs: React.FC = () => {
         ======================================================== */}
         {subTab === 'tools' && (
           <div className="space-y-5 animate-fadeIn">
+
+            {/* NPPR Team: fornecedor e sincronização de catálogo */}
+            <div className="bg-surface p-5 rounded-lg border border-borderSoft shadow-2xs space-y-4 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-borderSoft">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-lg bg-black text-white flex items-center justify-center shrink-0" aria-hidden="true">
+                    <PackageSearch className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-bold text-sm text-ink">NPPR Team — Fornecedor</h3>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${nppr.enabled && nppr.hasApiKey ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {nppr.enabled && nppr.hasApiKey ? 'Ativa' : nppr.hasApiKey ? 'Configurada' : 'Não configurada'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-ink-muted">Sincroniza produtos, preços e estoque e entrega os itens depois do pagamento.</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => void handleTestConnection('nppr')} disabled={testingConnection === 'nppr' || (!npprApiKey.trim() && !nppr.hasApiKey)} className="min-h-9 px-3 rounded-md bg-surface-warm hover:bg-black/[0.05] border border-borderSoft font-semibold text-ink text-xs inline-flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <RefreshCw className={`w-3.5 h-3.5 ${testingConnection === 'nppr' ? 'animate-spin' : ''}`} aria-hidden="true" />
+                    {testingConnection === 'nppr' ? 'Testando...' : 'Testar e consultar saldo'}
+                  </button>
+                  <button type="button" onClick={() => void handleSyncNppr()} disabled={syncingNppr || !nppr.hasApiKey} className="min-h-9 px-3 rounded-md bg-surface-warm hover:bg-black/[0.05] border border-borderSoft font-semibold text-ink text-xs inline-flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <ArrowDownToLine className={`w-3.5 h-3.5 ${syncingNppr ? 'animate-bounce' : ''}`} aria-hidden="true" />
+                    {syncingNppr ? 'Sincronizando...' : 'Sincronizar catálogo'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-3">
+                  <label htmlFor="npprApiKey" className="block font-medium text-ink mb-1">API Key da NPPR Team</label>
+                  <input id="npprApiKey" type="password" autoComplete="new-password" value={npprApiKey} onChange={event => setNpprApiKey(event.target.value)} placeholder={nppr.hasApiKey ? `Configurada (${nppr.apiKeyHint}) — deixe vazio para manter` : 'Cole a chave da área API'} className="w-full min-h-10 px-3 py-2 bg-surface-warm border border-borderSoft rounded-md text-ink font-mono text-xs focus:bg-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15" />
+                  <p className="mt-1.5 text-[11px] text-ink-muted">A chave fica somente no servidor e não é exposta na loja.</p>
+                </div>
+                <div>
+                  <label htmlFor="npprRate" className="block font-medium text-ink mb-1">Cotação USD → BRL</label>
+                  <input id="npprRate" type="number" min="0.01" step="0.0001" value={nppr.usdBrlRate} onChange={event => setNppr(value => ({ ...value, usdBrlRate: Number(event.target.value) }))} className="w-full min-h-10 px-3 py-2 bg-surface-warm border border-borderSoft rounded-md text-ink text-xs focus:bg-white focus:border-primary" />
+                </div>
+                <div>
+                  <label htmlFor="npprMarkup" className="block font-medium text-ink mb-1">Margem de revenda (%)</label>
+                  <input id="npprMarkup" type="number" min="0" max="1000" step="0.01" value={nppr.markupPercent} onChange={event => setNppr(value => ({ ...value, markupPercent: Number(event.target.value) }))} className="w-full min-h-10 px-3 py-2 bg-surface-warm border border-borderSoft rounded-md text-ink text-xs focus:bg-white focus:border-primary" />
+                </div>
+                <div className="rounded-md border border-borderSoft bg-surface-warm px-3 py-2">
+                  <p className="font-medium text-ink">Última sincronização</p>
+                  <p className="mt-1 text-ink-muted">{nppr.lastSyncAt ? new Date(nppr.lastSyncAt).toLocaleString('pt-BR') : 'Ainda não realizada'}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  ['enabled', 'Ativar integração', 'Permite consultas e sincronizações.'],
+                  ['autoFulfill', 'Entrega automática', 'Compra no fornecedor após pagamento confirmado.'],
+                  ['publishProducts', 'Publicar sincronizados', 'Deixa disponíveis os itens com estoque.'],
+                ].map(([field, label, help]) => (
+                  <label key={field} className="flex items-start gap-2 rounded-md border border-borderSoft p-3 cursor-pointer">
+                    <input type="checkbox" checked={Boolean(nppr[field as keyof typeof nppr])} onChange={event => setNppr(value => ({ ...value, [field]: event.target.checked }))} className="mt-0.5 accent-primary" />
+                    <span><span className="block font-semibold text-ink">{label}</span><span className="block mt-0.5 text-[10px] leading-relaxed text-ink-muted">{help}</span></span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-900">
+                A entrega automática usa o saldo da conta do fornecedor. Produtos só são publicados automaticamente quando os três controles acima estiverem ativos; pedidos repetidos são bloqueados por idempotência.
+              </div>
+
+              {testResult?.id === 'nppr' && (
+                <div role={testResult.success ? 'status' : 'alert'} aria-live="polite" className={`p-3 rounded-md border text-xs flex items-start gap-2 ${testResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
+                  <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${testResult.success ? 'text-emerald-600' : 'text-rose-600'}`} aria-hidden="true" />
+                  <span>{testResult.message}</span>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <button type="button" onClick={() => void handleSaveNppr()} disabled={savingNppr || (!npprApiKey.trim() && !nppr.hasApiKey)} className="min-h-10 px-4 rounded-md bg-primary hover:bg-primary-pressed text-white font-semibold text-xs inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {savingNppr ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  {savingNppr ? 'Salvando...' : 'Salvar fornecedor'}
+                </button>
+              </div>
+            </div>
 
             {/* Resend: envio dos códigos de acesso da área do cliente */}
             <div className="bg-surface p-5 rounded-lg border border-borderSoft shadow-2xs space-y-4 text-xs">

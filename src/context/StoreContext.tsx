@@ -577,7 +577,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (error) return showToast(error.message, 'error'); setCollections(value => value.filter(item => item.id !== id)); showToast('Coleção removida.', 'info');
   };
 
-  const addToCart = (product: DigitalProduct) => setCart(value => value.some(item => item.product.id === product.id) ? value : [...value, { product, quantity: 1 }]);
+  const addToCart = (product: DigitalProduct) => setCart(value => value.some(item => item.product.id === product.id)
+    ? value
+    : [...value, { product, quantity: Math.max(1, Number(product.minimumOrder || 1)) }]);
   const removeFromCart = (id: string) => setCart(value => value.filter(item => item.product.id !== id));
   const updateCartQuantity = (id: string, quantity: number) => quantity <= 0
     ? removeFromCart(id)
@@ -585,8 +587,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       ? {
           ...item,
           quantity: item.product.unlimitedStock
-            ? quantity
-            : Math.min(quantity, Math.max(1, item.product.stockQuantity)),
+            ? Math.max(Number(item.product.minimumOrder || 1), quantity)
+            : Math.max(Number(item.product.minimumOrder || 1), Math.min(quantity, Math.max(1, item.product.stockQuantity))),
         }
       : item));
   const clearCart = () => { setCart([]); setAppliedCoupon(null); };
@@ -629,6 +631,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     if (value.paymentMethod === 'wallet') {
       await refreshWallet();
+      const token = await customerAccessToken();
+      if (token) {
+        try {
+          const fulfillmentResponse = await fetch('/api/nppr/fulfill-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ orderId: order.id }),
+          });
+          if (fulfillmentResponse.ok) await loadCustomerData();
+        } catch {
+          // O pedido já está pago; uma indisponibilidade do fornecedor não desfaz a compra local.
+        }
+      }
       showToast('Pagamento realizado com o saldo da carteira.');
     } else {
       showToast('Pedido criado. Aguarde a confirmação do pagamento.');

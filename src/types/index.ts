@@ -41,6 +41,7 @@ export interface DigitalProduct {
   reviewsCount: number;
   unlimitedStock: boolean;
   stockQuantity: number;
+  minimumOrder?: number;
   tags: string[];
   features: string[];
   previewUrl?: string;
@@ -93,6 +94,7 @@ export interface Order {
     accessLogins?: string;
     proxyDetails?: string;
     accessInstructions?: string;
+    quantity?: number;
   }[];
   total: number;
   discount: number;

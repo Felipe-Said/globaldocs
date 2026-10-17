@@ -6,6 +6,7 @@ import {
   readBody,
   supabaseAdmin,
 } from '../../server/nowpayments.mjs';
+import { fulfillNpprOrder } from '../../server/nppr.mjs';
 
 const sortObject = value => {
   if (Array.isArray(value)) return value.map(sortObject);
@@ -66,6 +67,7 @@ export default async function handler(request, response) {
 
       if (isPaidStatus(status)) {
         await supabaseAdmin.from('orders').update({ status: 'paid' }).eq('id', orderId).eq('payment_method', 'crypto');
+        await fulfillNpprOrder(orderId);
       }
       return json(response, 200, { ok: true });
     }
