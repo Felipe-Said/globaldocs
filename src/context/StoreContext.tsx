@@ -157,19 +157,33 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const loadStoreData = async () => {
+    try {
+      const response = await fetch('/api/nppr?action=catalog', { cache: 'no-store' });
+      if (response.ok) {
+        const catalog = await response.json();
+        setProducts((catalog.products || []).map((row: any) => productFromRow(row)));
+        setCollections((catalog.collections || []).map(collectionFromRow));
+        setBanners((catalog.banners || []).map(bannerFromRow));
+        setSettings({ ...DEFAULT_SETTINGS, ...(catalog.settings || {}) });
+        return;
+      }
+    } catch {
+      // A leitura direta abaixo mantém a loja disponível caso a função serverless esteja indisponível.
+    }
+
     const [productResult, collectionResult, bannerResult, settingsResult] = await Promise.all([
       supabase.from('products').select('*').order('created_at', { ascending: false }),
       supabase.from('collections').select('*').order('created_at'),
       supabase.from('banners').select('*').order('sort_order'),
       supabase.from('store_settings').select('data').eq('id', 1).maybeSingle(),
     ]);
+    if (!productResult.error) setProducts((productResult.data || []).map((row: any) => productFromRow(row)));
+    if (!collectionResult.error) setCollections((collectionResult.data || []).map(collectionFromRow));
+    if (!bannerResult.error) setBanners((bannerResult.data || []).map(bannerFromRow));
+    if (!settingsResult.error && settingsResult.data?.data) setSettings({ ...DEFAULT_SETTINGS, ...settingsResult.data.data });
     if (productResult.error || collectionResult.error || bannerResult.error || settingsResult.error) {
-      showToast('Não foi possível carregar os dados da loja.', 'error'); return;
+      showToast('Alguns dados da loja não puderam ser carregados.', 'error');
     }
-    setProducts((productResult.data || []).map((row: any) => productFromRow(row)));
-    setCollections((collectionResult.data || []).map(collectionFromRow));
-    setBanners((bannerResult.data || []).map(bannerFromRow));
-    if (settingsResult.data?.data) setSettings({ ...DEFAULT_SETTINGS, ...settingsResult.data.data });
   };
 
   const migrateInlineBannerImages = async (rows: any[]) => {
@@ -317,12 +331,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const hydrateSession = async (userId: string) => {
+    await loadStoreData();
     if (await validateAdmin(userId)) {
       setCustomerUser(null);
       await loadAdminData();
       return;
     }
-    await Promise.all([loadStoreData(), loadCustomerData()]);
+    await loadCustomerData();
   };
 
   useEffect(() => {

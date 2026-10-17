@@ -16,6 +16,22 @@ const publicSettings = settings => ({
 export default async function handler(request, response) {
   try {
     const body = readBody(request);
+    if (request.method === 'GET' && request.query.action === 'catalog') {
+      const [products, collections, banners, settings] = await Promise.all([
+        supabaseAdmin.from('products').select('*').eq('active', true).order('created_at', { ascending: false }),
+        supabaseAdmin.from('collections').select('*').eq('active', true).order('created_at'),
+        supabaseAdmin.from('banners').select('*').eq('active', true).order('sort_order'),
+        supabaseAdmin.from('store_settings').select('data').eq('id', 1).maybeSingle(),
+      ]);
+      const catalogError = products.error || collections.error || banners.error || settings.error;
+      if (catalogError) throw catalogError;
+      return json(response, 200, {
+        products: products.data || [],
+        collections: collections.data || [],
+        banners: banners.data || [],
+        settings: settings.data?.data || {},
+      });
+    }
     if (request.method === 'POST' && body.action === 'fulfill') {
       const customer = await requireCustomer(request);
       if (!customer) return json(response, 401, { error: 'Sessão do cliente inválida.' });
@@ -44,7 +60,7 @@ export default async function handler(request, response) {
     if (body.action === 'sync') {
       if (!current.api_key) return json(response, 400, { error: 'Salve a API Key antes de sincronizar.' });
       const result = await syncNpprCatalog(current);
-      return json(response, 200, { success: true, ...result, message: `${result.total} produtos lidos: ${result.created} novos e ${result.updated} atualizados.` });
+      return json(response, 200, { success: true, ...result, message: `${result.total} produtos em ${result.categories} coleções: ${result.created} novos e ${result.updated} atualizados.` });
     }
 
     const usdBrlRate = Number(body.usdBrlRate);

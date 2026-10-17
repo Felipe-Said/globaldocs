@@ -33,12 +33,54 @@ const flattenProducts = payload => Object.entries(payload || {}).flatMap(([categ
 
 const money = value => Math.round(Number(value) * 100) / 100;
 
+const slugify = value => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '');
+
 export const syncNpprCatalog = async settings => {
   const [categories, productPayload] = await Promise.all([
     callNppr(settings.api_key, '/categories'),
     callNppr(settings.api_key, '/products'),
   ]);
   const products = flattenProducts(productPayload);
+  const supplierActive = Boolean(settings.enabled && settings.auto_fulfill && settings.publish_products);
+  const collectionRows = (Array.isArray(categories) ? categories : []).map(category => {
+    const supplierCollectionId = String(category.slug || category.id);
+    const name = category.titleEn || category.titleRu || supplierCollectionId;
+    return {
+      supplier: 'nppr',
+      supplier_collection_id: supplierCollectionId,
+      active: supplierActive,
+      data: {
+        name,
+        slug: `nppr-${slugify(category.slug || name || category.id)}`,
+        description: `Produtos da coleção ${name}, com estoque e preços sincronizados automaticamente.`,
+        badgeColor: 'bg-blue-50 text-blue-800 border-blue-200',
+        supplier: 'nppr',
+        supplierCollectionId,
+      },
+    };
+  });
+  let syncedCollections = [];
+  if (collectionRows.length) {
+    const { data, error } = await supabaseAdmin.from('collections').upsert(collectionRows, {
+      onConflict: 'supplier,supplier_collection_id',
+    }).select('id,supplier_collection_id,data');
+    if (error) throw error;
+    syncedCollections = data || [];
+  }
+  const collectionIdBySupplierId = new Map(syncedCollections.map(collection => [
+    String(collection.supplier_collection_id), collection.id,
+  ]));
+  for (const category of Array.isArray(categories) ? categories : []) {
+    const collectionId = collectionIdBySupplierId.get(String(category.slug || category.id));
+    if (!collectionId) continue;
+    collectionIdBySupplierId.set(String(category.id), collectionId);
+    collectionIdBySupplierId.set(String(category.slug), collectionId);
+  }
   const { data: existing, error: existingError } = await supabaseAdmin
     .from('products').select('id,data,featured,supplier_product_id').eq('supplier', 'nppr');
   if (existingError) throw existingError;
@@ -67,6 +109,7 @@ export const syncNpprCatalog = async settings => {
       productType: 'contas',
       deliveryType: 'digital',
       deliverySpeed: 'immediate',
+      collectionId: collectionIdBySupplierId.get(String(source.category)),
       price: salePrice,
       format: 'PACOTE',
       fileSize: 'Entrega digital',
@@ -86,7 +129,7 @@ export const syncNpprCatalog = async settings => {
       supplierPriceUsd: Number(source.priceUsd),
       supplierUpdatedAt: source.updatedAt || null,
     };
-    const active = Boolean(settings.enabled && settings.auto_fulfill && settings.publish_products && quantity >= minimumOrder);
+    const active = Boolean(supplierActive && quantity >= minimumOrder);
     rows.push({
       supplier: 'nppr',
       supplier_product_id: supplierProductId,
@@ -104,7 +147,7 @@ export const syncNpprCatalog = async settings => {
     if (error) throw error;
   }
   await supabaseAdmin.from('nppr_settings').update({ last_sync_at: new Date().toISOString() }).eq('id', 1);
-  return { created, updated, total: products.length, categories: Array.isArray(categories) ? categories.length : 0 };
+  return { created, updated, total: products.length, categories: syncedCollections.length };
 };
 
 const formatDeliveredItems = items => (Array.isArray(items) ? items : [])
