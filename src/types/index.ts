@@ -31,6 +31,7 @@ export interface DigitalProduct {
   productType: ProductType;
   deliveryType?: DeliveryType;
   collectionId?: string;
+  subcategory?: string;
   price: number;
   originalPrice?: number;
   format: FileFormat;

@@ -16,6 +16,8 @@ import {
   Zap,
   Clock,
   Rocket
+  ,Minus,
+  Plus
 } from 'lucide-react';
 import { buildProductSEO, updateDocumentSEO } from '../utils/seo';
 import { detectCountries } from '../utils/countryDetection';
@@ -23,7 +25,8 @@ import { CountryBadgesList } from './CountryBadge';
 import { UsdtEstimate } from './UsdtEstimate';
 
 export const ProductDetailModal: React.FC = () => {
-  const { selectedProduct, setSelectedProduct, addToCart, setIsCartOpen, cart, collections } = useStore();
+  const { selectedProduct, setSelectedProduct, addToCart, updateCartQuantity, setIsCartOpen, cart, collections } = useStore();
+  const [quantity, setQuantity] = React.useState(1);
 
   React.useEffect(() => {
     if (selectedProduct) {
@@ -39,9 +42,16 @@ export const ProductDetailModal: React.FC = () => {
     };
   }, [selectedProduct]);
 
+  React.useEffect(() => {
+    if (!selectedProduct) return;
+    const current = cart.find(item => item.product.id === selectedProduct.id);
+    setQuantity(current?.quantity || Math.max(1, Number(selectedProduct.minimumOrder || 1)));
+  }, [selectedProduct?.id]);
+
   if (!selectedProduct) return null;
 
   const isInCart = cart.some(item => item.product.id === selectedProduct.id);
+  const cartItem = cart.find(item => item.product.id === selectedProduct.id);
   const collection = collections.find(c => c.id === selectedProduct.collectionId);
   const detectedBrands = detectBrands(selectedProduct);
   const detectedCountries = detectCountries(selectedProduct);
@@ -51,12 +61,16 @@ export const ProductDetailModal: React.FC = () => {
   };
 
   const handleBuyNow = () => {
-    if (!isInCart) {
-      addToCart(selectedProduct);
-    }
+    if (isInCart) updateCartQuantity(selectedProduct.id, quantity);
+    else addToCart(selectedProduct, quantity);
     setSelectedProduct(null);
     setIsCartOpen(true);
   };
+
+  const minimumQuantity = Math.max(1, Number(selectedProduct.minimumOrder || 1));
+  const maximumQuantity = selectedProduct.unlimitedStock ? 10000 : Math.max(minimumQuantity, Number(selectedProduct.stockQuantity || minimumQuantity));
+  const usesQuantity = maximumQuantity > 1 || minimumQuantity > 1;
+  const changeQuantity = (next: number) => setQuantity(Math.max(minimumQuantity, Math.min(maximumQuantity, Math.floor(next || minimumQuantity))));
 
   const getTypeLabel = (type: string) => {
     const lower = (type || '').toLowerCase();
@@ -285,12 +299,12 @@ export const ProductDetailModal: React.FC = () => {
         </div>
 
         {/* Footer Checkout Action */}
-        <div className="p-3.5 sm:p-5 border-t border-borderSoft bg-surface-warm flex items-center justify-between gap-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="p-3.5 sm:p-5 border-t border-borderSoft bg-surface-warm flex flex-col sm:flex-row sm:items-end justify-between gap-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div>
             <div className="text-[10px] sm:text-xs text-ink-muted">Total:</div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-xl sm:text-2xl font-bold text-ink">
-                {formatPrice(selectedProduct.price)}
+                {formatPrice(selectedProduct.price * quantity)}
               </span>
               {selectedProduct.originalPrice && (
                 <span className="text-xs text-ink-faint line-through">
@@ -298,15 +312,55 @@ export const ProductDetailModal: React.FC = () => {
                 </span>
               )}
             </div>
-            <UsdtEstimate amount={selectedProduct.price} compact />
+            <UsdtEstimate amount={selectedProduct.price * quantity} compact />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-end gap-2 w-full sm:w-auto">
+            {usesQuantity && (
+              <div>
+                <label htmlFor="product-quantity" className="block text-[10px] font-semibold text-ink-muted mb-1">
+                  Quantidade {minimumQuantity > 1 ? `(mín. ${minimumQuantity})` : ''}
+                </label>
+                <div className="flex items-center rounded-sm border border-borderSoft bg-white overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => changeQuantity(quantity - 1)}
+                    disabled={quantity <= minimumQuantity}
+                    className="w-11 h-11 inline-flex items-center justify-center text-ink hover:bg-surface-warm disabled:opacity-35 disabled:cursor-not-allowed"
+                    aria-label="Diminuir quantidade"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <input
+                    id="product-quantity"
+                    type="number"
+                    min={minimumQuantity}
+                    max={maximumQuantity}
+                    value={quantity}
+                    onChange={event => changeQuantity(Number(event.target.value))}
+                    className="w-14 h-11 border-x border-borderSoft text-center text-sm font-bold text-ink focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    aria-describedby="product-quantity-stock"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => changeQuantity(quantity + 1)}
+                    disabled={quantity >= maximumQuantity}
+                    className="w-11 h-11 inline-flex items-center justify-center text-ink hover:bg-surface-warm disabled:opacity-35 disabled:cursor-not-allowed"
+                    aria-label="Aumentar quantidade"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+                <div id="product-quantity-stock" className="mt-1 text-[10px] text-ink-muted">
+                  {selectedProduct.unlimitedStock ? 'Disponibilidade contínua' : `${maximumQuantity.toLocaleString('pt-BR')} disponíveis`}
+                </div>
+              </div>
+            )}
             <button
               onClick={handleBuyNow}
-              className="h-10 sm:h-9 px-5 sm:px-6 rounded-sm bg-primary hover:bg-primary-pressed text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+              className="h-11 px-5 sm:px-6 rounded-sm bg-primary hover:bg-primary-pressed text-white text-xs font-semibold flex-1 sm:flex-none flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
             >
-              <span>Comprar Agora</span>
+              <span>{cartItem ? 'Atualizar e comprar' : 'Comprar Agora'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

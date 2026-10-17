@@ -31,6 +31,8 @@ import {
   Coins,
   RefreshCw,
   WalletCards
+  ,Minus,
+  Plus
 } from 'lucide-react';
 
 export type CartPhase = 'cart' | 'customer' | 'payment' | 'success';
@@ -60,6 +62,7 @@ export const CartDrawer: React.FC = () => {
     setIsCheckoutOpen,
     cart, 
     removeFromCart, 
+    updateCartQuantity,
     clearCart,
     subtotal, 
     discount, 
@@ -596,7 +599,7 @@ export const CartDrawer: React.FC = () => {
                           className={`cart-item flex items-center gap-4 bg-white border border-gray-100 p-4 rounded-xl shadow-xs transition-all duration-400 ease-[cubic-bezier(0.65,0,0.35,1)] ${
                             isRemoving 
                               ? 'opacity-0 -translate-x-5 scale-95 max-h-0 !p-0 !m-0 !border-0 overflow-hidden' 
-                              : 'opacity-100 translate-x-0 scale-100 max-h-40'
+                              : 'opacity-100 translate-x-0 scale-100 max-h-52'
                           }`}
                         >
                           {/* Miniatura / Formato */}
@@ -638,7 +641,41 @@ export const CartDrawer: React.FC = () => {
                             </h3>
 
                             <div className="mt-1 font-semibold text-gray-900 text-sm">
-                              {formatPrice(item.product.price)}
+                              {formatPrice(item.product.price * item.quantity)}
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <div className="inline-flex items-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                                <button
+                                  type="button"
+                                  onClick={() => updateCartQuantity(item.product.id, item.quantity - 1)}
+                                  disabled={item.quantity <= Math.max(1, Number(item.product.minimumOrder || 1))}
+                                  className="h-11 w-11 inline-flex items-center justify-center text-gray-700 hover:bg-white disabled:opacity-35 disabled:cursor-not-allowed"
+                                  aria-label={`Diminuir quantidade de ${item.product.title}`}
+                                >
+                                  <Minus className="w-3.5 h-3.5" />
+                                </button>
+                                <input
+                                  type="number"
+                                  min={Math.max(1, Number(item.product.minimumOrder || 1))}
+                                  max={item.product.unlimitedStock ? 10000 : item.product.stockQuantity}
+                                  value={item.quantity}
+                                  onChange={event => updateCartQuantity(item.product.id, Number(event.target.value))}
+                                  className="h-11 w-14 border-x border-gray-200 bg-white text-center text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                  aria-label={`Quantidade de ${item.product.title}`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => updateCartQuantity(item.product.id, item.quantity + 1)}
+                                  disabled={!item.product.unlimitedStock && item.quantity >= item.product.stockQuantity}
+                                  className="h-11 w-11 inline-flex items-center justify-center text-gray-700 hover:bg-white disabled:opacity-35 disabled:cursor-not-allowed"
+                                  aria-label={`Aumentar quantidade de ${item.product.title}`}
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <span className="text-[10px] text-gray-500">
+                                {formatPrice(item.product.price)} cada
+                              </span>
                             </div>
                           </div>
 

@@ -11,7 +11,9 @@ import {
   FilterX, 
   ChevronRight, 
   Home,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Layers3,
+  ChevronDown
 } from 'lucide-react';
 
 const FORMATS: (FileFormat | 'all')[] = [
@@ -31,7 +33,9 @@ export const CollectionView: React.FC = () => {
 
   const [localSearch, setLocalSearch] = useState('');
   const [selectedFormat, setSelectedFormat] = useState<FileFormat | 'all'>('all');
+  const [selectedSubcategory, setSelectedSubcategory] = useState('all');
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'popular' | 'newest'>('featured');
+  const [visibleCount, setVisibleCount] = useState(24);
 
   // Encontra a coleção pelo slug ou pelo id
   const collection = useMemo(() => {
@@ -68,6 +72,16 @@ export const CollectionView: React.FC = () => {
     return products.filter(p => p.active && p.collectionId === collection.id);
   }, [collection, products]);
 
+  const subcategories = useMemo(() => {
+    const counts = new Map<string, number>();
+    collectionProducts.forEach(product => {
+      if (product.subcategory) counts.set(product.subcategory, (counts.get(product.subcategory) || 0) + 1);
+    });
+    return Array.from(counts, ([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }, [collectionProducts]);
+
+  useEffect(() => setSelectedSubcategory('all'), [collection?.id]);
+
   // Produtos filtrados e ordenados
   const filteredProducts = useMemo(() => {
     return collectionProducts.filter(product => {
@@ -75,6 +89,8 @@ export const CollectionView: React.FC = () => {
       if (selectedFormat !== 'all' && product.format !== selectedFormat) {
         return false;
       }
+
+      if (selectedSubcategory !== 'all' && product.subcategory !== selectedSubcategory) return false;
 
       // Busca local
       if (localSearch.trim()) {
@@ -99,7 +115,10 @@ export const CollectionView: React.FC = () => {
       if (!a.isFeatured && b.isFeatured) return 1;
       return 0;
     });
-  }, [collectionProducts, selectedFormat, localSearch, sortBy]);
+  }, [collectionProducts, selectedFormat, selectedSubcategory, localSearch, sortBy]);
+
+  useEffect(() => setVisibleCount(24), [collection?.id, selectedFormat, selectedSubcategory, localSearch, sortBy]);
+  const visibleProducts = filteredProducts.slice(0, visibleCount);
 
   // Outras coleções ativas para navegação rápida
   const otherCollections = useMemo(() => {
@@ -242,6 +261,36 @@ export const CollectionView: React.FC = () => {
             </div>
           </div>
 
+          {subcategories.length > 1 && (
+            <div className="mt-4" aria-label="Subcoleções desta coleção">
+              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-ink-muted">
+                <Layers3 className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
+                <span>Escolha o tipo de produto</span>
+              </div>
+              <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 no-scrollbar">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSubcategory('all')}
+                  aria-pressed={selectedSubcategory === 'all'}
+                  className={`min-h-11 shrink-0 rounded-full border px-4 text-xs font-semibold transition-colors ${selectedSubcategory === 'all' ? 'border-primary bg-primary text-white' : 'border-borderSoft bg-white text-ink hover:border-primary/50'}`}
+                >
+                  Todos <span className="opacity-75">({collectionProducts.length})</span>
+                </button>
+                {subcategories.map(item => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => setSelectedSubcategory(item.name)}
+                    aria-pressed={selectedSubcategory === item.name}
+                    className={`min-h-11 shrink-0 rounded-full border px-4 text-xs font-semibold transition-colors ${selectedSubcategory === item.name ? 'border-primary bg-primary text-white' : 'border-borderSoft bg-white text-ink hover:border-primary/50'}`}
+                  >
+                    {item.name} <span className="opacity-75">({item.count})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
         </div>
       </section>
 
@@ -251,14 +300,15 @@ export const CollectionView: React.FC = () => {
         {/* Results Counter & Clear Filter */}
         <div className="flex items-center justify-between pb-4 mb-6 border-b border-borderSoft text-xs">
           <div className="flex items-center gap-2 font-medium text-ink">
-            <span>Mostrando {filteredProducts.length} de {collectionProducts.length} produtos desta coleção</span>
+            <span>{filteredProducts.length} de {collectionProducts.length} produtos correspondem à seleção</span>
           </div>
 
-          {(localSearch || selectedFormat !== 'all') && (
+          {(localSearch || selectedFormat !== 'all' || selectedSubcategory !== 'all') && (
             <button
               onClick={() => {
                 setLocalSearch('');
                 setSelectedFormat('all');
+                setSelectedSubcategory('all');
               }}
               className="text-primary hover:underline flex items-center gap-1 font-medium cursor-pointer"
             >
@@ -280,11 +330,12 @@ export const CollectionView: React.FC = () => {
                 ? 'Nenhum item foi vinculado a esta coleção até o momento.'
                 : 'Não há itens correspondentes aos filtros aplicados.'}
             </p>
-            {(localSearch || selectedFormat !== 'all') ? (
+            {(localSearch || selectedFormat !== 'all' || selectedSubcategory !== 'all') ? (
               <button
                 onClick={() => {
                   setLocalSearch('');
                   setSelectedFormat('all');
+                  setSelectedSubcategory('all');
                 }}
                 className="h-8.5 px-4 rounded-sm bg-primary text-white text-xs font-semibold hover:bg-primary-pressed transition-colors cursor-pointer"
               >
@@ -301,9 +352,22 @@ export const CollectionView: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {filteredProducts.map(product => (
+            {visibleProducts.map(product => (
               <ProductCard key={product.id} product={product} />
             ))}
+          </div>
+        )}
+
+        {visibleProducts.length < filteredProducts.length && (
+          <div className="mt-8 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setVisibleCount(count => count + 24)}
+              className="min-h-11 inline-flex items-center justify-center gap-2 rounded-sm border border-borderSoft bg-surface-warm px-5 text-xs font-semibold text-ink hover:bg-black/[0.05] focus:outline-none focus:ring-2 focus:ring-primary/25"
+            >
+              Carregar mais produtos
+              <ChevronDown className="w-4 h-4 text-primary" aria-hidden="true" />
+            </button>
           </div>
         )}
 

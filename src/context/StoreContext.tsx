@@ -5,6 +5,7 @@ import {
   Order, PaymentMethod, ProductType, StoreSettings,
 } from '../types';
 import { isValidTaxId, normalizeCustomerName, normalizeTaxId } from '../lib/customer-profile';
+import { deriveProductSubcategory, localizeCatalogText } from '../utils/catalogLocalization';
 
 export interface CustomerUser { id: string; email: string; name?: string; document?: string }
 export interface WalletTransaction {
@@ -72,7 +73,7 @@ interface StoreContextType {
   selectedFormat: FileFormat | 'all'; setSelectedFormat: (value: FileFormat | 'all') => void;
   sortBy: 'featured' | 'price-asc' | 'price-desc' | 'popular' | 'newest';
   setSortBy: (value: 'featured' | 'price-asc' | 'price-desc' | 'popular' | 'newest') => void;
-  cart: CartItem[]; addToCart: (value: DigitalProduct) => void; removeFromCart: (id: string) => void;
+  cart: CartItem[]; addToCart: (value: DigitalProduct, quantity?: number) => void; removeFromCart: (id: string) => void;
   updateCartQuantity: (id: string, quantity: number) => void; clearCart: () => void;
   cartCount: number; subtotal: number; discount: number; total: number;
   appliedCoupon: Coupon | null; applyCoupon: (code: string) => Promise<Result>; removeCoupon: () => void;
@@ -97,13 +98,32 @@ const DEFAULT_SETTINGS: StoreSettings = {
 const DELIVERABLE_FIELDS = ['downloadFileName', 'zipFileName', 'accessLogins', 'proxyDetails', 'accessInstructions'] as const;
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
-const productFromRow = (row: any, deliverable?: Record<string, unknown>): DigitalProduct => ({
-  ...row.data, ...(deliverable || {}), id: row.id, active: row.active, isFeatured: row.featured,
-  downloadsCount: Number(row.data?.downloadsCount || 0), createdAt: row.created_at, updatedAt: row.updated_at,
-  unlimitedStock: row.data?.unlimitedStock !== false,
-  stockQuantity: Math.max(0, Number(row.data?.stockQuantity ?? 1)),
+const productFromRow = (row: any, deliverable?: Record<string, unknown>): DigitalProduct => {
+  const source = { ...row.data, ...(deliverable || {}) };
+  const isSupplierProduct = row.supplier === 'nppr' || source.supplier === 'nppr';
+  const title = isSupplierProduct ? localizeCatalogText(source.title) : source.title;
+  const collectionHint = source.supplierCategory || source.tags?.[0] || '';
+  return {
+    ...source,
+    title,
+    tagline: isSupplierProduct ? localizeCatalogText(source.tagline) : source.tagline,
+    description: isSupplierProduct ? localizeCatalogText(source.description) : source.description,
+    tags: isSupplierProduct ? (source.tags || []).map(localizeCatalogText) : (source.tags || []),
+    features: isSupplierProduct ? (source.features || []).map(localizeCatalogText) : (source.features || []),
+    subcategory: source.subcategory || (isSupplierProduct ? deriveProductSubcategory(collectionHint, title) : undefined),
+    id: row.id, active: row.active, isFeatured: row.featured,
+    downloadsCount: Number(source.downloadsCount || 0), createdAt: row.created_at, updatedAt: row.updated_at,
+    unlimitedStock: source.unlimitedStock !== false,
+    stockQuantity: Math.max(0, Number(source.stockQuantity ?? 1)),
+  } as DigitalProduct;
+};
+const collectionFromRow = (row: any): Collection => ({
+  ...row.data,
+  name: row.supplier === 'nppr' ? localizeCatalogText(row.data?.name) : row.data?.name,
+  description: row.supplier === 'nppr' ? localizeCatalogText(row.data?.description) : row.data?.description,
+  id: row.id,
+  active: row.active,
 });
-const collectionFromRow = (row: any): Collection => ({ ...row.data, id: row.id, active: row.active });
 const bannerFromRow = (row: any): Banner => ({ ...row.data, id: row.id, active: row.active, order: row.sort_order });
 const couponFromRow = (row: any): Coupon => ({
   code: row.code, discountPercent: Number(row.discount_percent), active: row.active,
@@ -112,7 +132,7 @@ const couponFromRow = (row: any): Coupon => ({
 const orderFromRow = (row: any): Order => ({
   id: row.id, customerName: row.customer_name, customerEmail: row.customer_email,
   customerDocument: row.customer_document, shippingAddress: row.shipping_address || undefined,
-  items: row.items || [], total: Number(row.total), discount: Number(row.discount),
+  items: (row.items || []).map((item: any) => ({ ...item, productTitle: localizeCatalogText(item.productTitle) })), total: Number(row.total), discount: Number(row.discount),
   appliedCoupon: row.applied_coupon || undefined, paymentMethod: row.payment_method,
   status: row.status, downloadToken: row.download_token, trackingCode: row.tracking_code || undefined,
   createdAt: row.created_at,
@@ -615,9 +635,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (error) return showToast(error.message, 'error'); setCollections(value => value.filter(item => item.id !== id)); showToast('Coleção removida.', 'info');
   };
 
-  const addToCart = (product: DigitalProduct) => setCart(value => value.some(item => item.product.id === product.id)
-    ? value
-    : [...value, { product, quantity: Math.max(1, Number(product.minimumOrder || 1)) }]);
+  const addToCart = (product: DigitalProduct, requestedQuantity?: number) => setCart(value => {
+    const minimum = Math.max(1, Number(product.minimumOrder || 1));
+    const maximum = product.unlimitedStock ? 10000 : Math.max(minimum, Number(product.stockQuantity || minimum));
+    const quantity = Math.max(minimum, Math.min(Math.floor(Number(requestedQuantity || minimum)), maximum));
+    const existing = value.find(item => item.product.id === product.id);
+    return existing
+      ? value.map(item => item.product.id === product.id ? { ...item, quantity } : item)
+      : [...value, { product, quantity }];
+  });
   const removeFromCart = (id: string) => setCart(value => value.filter(item => item.product.id !== id));
   const updateCartQuantity = (id: string, quantity: number) => quantity <= 0
     ? removeFromCart(id)

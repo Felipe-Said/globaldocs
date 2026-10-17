@@ -24,6 +24,7 @@ import {
   Zap,
   Clock,
   Rocket
+  ,Layers
 } from 'lucide-react';
 
 interface ProductCardProps {
@@ -112,11 +113,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             {formatBadge.label}
           </span>
           {collection && (
-            <span className="text-[10px] text-primary truncate max-w-[140px] font-medium whitespace-nowrap">
-              📁 {collection.name}
+            <span className="inline-flex items-center gap-1 text-[10px] text-primary truncate max-w-[140px] font-medium whitespace-nowrap">
+              <Layers className="w-3 h-3 shrink-0" aria-hidden="true" />
+              {collection.name}
             </span>
           )}
         </div>
+
+        {product.subcategory && (
+          <div className="mb-2">
+            <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
+              {product.subcategory}
+            </span>
+          </div>
+        )}
 
         {/* Title */}
         <h3 
@@ -199,6 +209,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               <Download className="w-2.5 h-2.5" />
               <span>{product.downloadsCount.toLocaleString('pt-BR')} solicitações</span>
             </div>
+            {!product.unlimitedStock && product.stockQuantity > 1 && (
+              <div className="mt-1 text-[10px] font-medium text-ink-muted">
+                {Number(product.minimumOrder || 1) > 1
+                  ? `Pedido mínimo: ${Number(product.minimumOrder).toLocaleString('pt-BR')} unidades`
+                  : `Escolha de 1 a ${product.stockQuantity.toLocaleString('pt-BR')} unidades`}
+              </div>
+            )}
           </div>
         </div>
 
