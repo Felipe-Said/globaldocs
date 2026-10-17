@@ -194,3 +194,37 @@ export const deriveProductSubcategory = (collectionName?: string, title?: string
   }
   return '';
 };
+
+export const deriveDeliveryFeatures = (title?: string, description?: string) => {
+  const text = `${String(title || '')} ${String(description || '')}`.toLowerCase();
+  const features: string[] = [];
+
+  if (includesAny(text, ['cookie', 'cookies'])) {
+    features.push('Cookies de sessão correspondentes à quantidade comprada');
+  } else if (includesAny(text, ['proxy', 'proxies'])) {
+    features.push('Dados de conexão correspondentes à quantidade comprada');
+  } else if (includesAny(text, [
+    'account', 'accounts', 'conta', 'contas', 'login', 'gmail', 'google', 'facebook',
+    'instagram', 'tiktok', 'twitter', 'reddit', 'discord', 'linkedin', 'telegram',
+    'pinterest', 'youtube', 'twitch', 'spotify', 'netflix', 'outlook', 'hotmail', 'yahoo',
+  ])) {
+    features.push('Credenciais de acesso correspondentes à quantidade comprada');
+  } else {
+    features.push('Item digital correspondente à quantidade comprada');
+  }
+
+  const inboxUnavailable = includesAny(text, ['no access', 'sem acesso', 'not included', 'não incluído']);
+  if (includesAny(text, ['email included', 'mail included', 'e-mail incluído']) && !inboxUnavailable) {
+    features.push('E-mail de acesso incluído');
+  } else if (includesAny(text, ['email verified', 'verified email', 'e-mail verificado']) && inboxUnavailable) {
+    features.push('E-mail verificado sem acesso à caixa, conforme anunciado');
+  }
+  if (text.includes('2fa')) features.push('Configuração de 2FA conforme a descrição do produto');
+  if (text.includes('token')) features.push('Token de acesso quando indicado na descrição');
+  if (includesAny(text, ['proxy', 'proxies']) && features[0].startsWith('Credenciais')) {
+    features.push('Dados de proxy quando indicados na descrição');
+  }
+
+  features.push('Entrega digital após a confirmação do pagamento');
+  return Array.from(new Set(features));
+};

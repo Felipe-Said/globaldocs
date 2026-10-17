@@ -3,20 +3,18 @@ import { Link } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
 import { Collection } from '../../types';
 import { 
-  Layers, 
-  Plus, 
   Edit2, 
   Trash2, 
-  Check, 
   X, 
   FolderPlus,
-  Box,
-  FileText,
-  ExternalLink
+  ExternalLink,
+  ArrowUp,
+  ArrowDown,
+  ListOrdered
 } from 'lucide-react';
 
 export const AdminCollections: React.FC = () => {
-  const { collections, addCollection, updateCollection, deleteCollection, products } = useStore();
+  const { collections, addCollection, updateCollection, reorderCollections, deleteCollection, products } = useStore();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
@@ -26,6 +24,22 @@ export const AdminCollections: React.FC = () => {
   const [description, setDescription] = useState('');
   const [badgeColor, setBadgeColor] = useState('bg-blue-50 text-blue-800 border-blue-200');
   const [active, setActive] = useState(true);
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
+
+  const orderedCollections = [...collections].sort((a, b) =>
+    Number(a.homeOrder ?? 9999) - Number(b.homeOrder ?? 9999)
+  );
+
+  const moveCollection = async (id: string, direction: -1 | 1) => {
+    const currentIndex = orderedCollections.findIndex(collection => collection.id === id);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedCollections.length) return;
+    const reordered = [...orderedCollections];
+    [reordered[currentIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[currentIndex]];
+    setReorderingId(id);
+    await reorderCollections(reordered.map(collection => collection.id));
+    setReorderingId(null);
+  };
 
   const openCreateModal = () => {
     setEditingCollection(null);
@@ -95,9 +109,19 @@ export const AdminCollections: React.FC = () => {
         </button>
       </div>
 
+      <div className="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-blue-950">
+        <ListOrdered className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+        <div>
+          <p className="text-sm font-semibold">Prioridade das coleções na home</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-blue-900/75">
+            A posição abaixo define a ordem exibida aos clientes. Use as setas para colocar primeiro as coleções mais importantes.
+          </p>
+        </div>
+      </div>
+
       {/* Collections Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {collections.map((col) => {
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        {orderedCollections.map((col, index) => {
           const count = getProductCountForCollection(col.id);
 
           return (
@@ -106,17 +130,43 @@ export const AdminCollections: React.FC = () => {
               className="bg-surface rounded-md border border-borderSoft p-5 flex flex-col justify-between hover:shadow-notion-card transition-all"
             >
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${col.badgeColor || 'bg-surface-warm text-ink-muted'}`}>
-                    {count} {count === 1 ? 'item vinculado' : 'itens vinculados'}
-                  </span>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex min-h-6 items-center rounded-full border border-primary/20 bg-primary/10 px-2 text-[11px] font-bold text-primary">
+                      #{index + 1} na home
+                    </span>
+                    <span className={`inline-flex min-h-6 items-center text-[11px] font-semibold px-2 rounded-full border ${col.badgeColor || 'bg-surface-warm text-ink-muted'}`}>
+                      {count} {count === 1 ? 'item vinculado' : 'itens vinculados'}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => openEditModal(col)}
-                      className="p-1 text-ink-muted hover:text-ink rounded hover:bg-surface-warm transition-colors cursor-pointer"
-                      title="Editar Coleção"
+                      type="button"
+                      onClick={() => void moveCollection(col.id, -1)}
+                      disabled={index === 0 || reorderingId !== null}
+                      className="flex h-11 w-11 items-center justify-center rounded-sm text-ink-muted transition-colors hover:bg-surface-warm hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
+                      aria-label={`Mover ${col.name} para cima`}
+                      title="Mover para cima"
                     >
-                      <Edit2 className="w-3.5 h-3.5" />
+                      <ArrowUp className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void moveCollection(col.id, 1)}
+                      disabled={index === orderedCollections.length - 1 || reorderingId !== null}
+                      className="flex h-11 w-11 items-center justify-center rounded-sm text-ink-muted transition-colors hover:bg-surface-warm hover:text-ink disabled:cursor-not-allowed disabled:opacity-35"
+                      aria-label={`Mover ${col.name} para baixo`}
+                      title="Mover para baixo"
+                    >
+                      <ArrowDown className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      onClick={() => openEditModal(col)}
+                      className="flex h-11 w-11 items-center justify-center text-ink-muted hover:text-ink rounded-sm hover:bg-surface-warm transition-colors cursor-pointer"
+                      title="Editar Coleção"
+                      aria-label={`Editar ${col.name}`}
+                    >
+                      <Edit2 className="w-4 h-4" aria-hidden="true" />
                     </button>
                     <button
                       onClick={() => {
@@ -124,10 +174,11 @@ export const AdminCollections: React.FC = () => {
                           deleteCollection(col.id);
                         }
                       }}
-                      className="p-1 text-ink-muted hover:text-accent-red rounded hover:bg-surface-warm transition-colors cursor-pointer"
+                      className="flex h-11 w-11 items-center justify-center text-ink-muted hover:text-accent-red rounded-sm hover:bg-surface-warm transition-colors cursor-pointer"
                       title="Excluir Coleção"
+                      aria-label={`Excluir ${col.name}`}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -178,9 +229,10 @@ export const AdminCollections: React.FC = () => {
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="w-7 h-7 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-warm cursor-pointer"
+                className="w-11 h-11 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-warm cursor-pointer"
+                aria-label="Fechar janela"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 

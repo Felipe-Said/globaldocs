@@ -20,6 +20,7 @@ export interface Collection {
   description: string;
   badgeColor?: string;
   active: boolean;
+  homeOrder?: number;
 }
 
 export interface DigitalProduct {

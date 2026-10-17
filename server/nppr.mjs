@@ -137,6 +137,34 @@ const deriveSubcategory = (collectionName, title) => {
   return '';
 };
 
+const deriveDeliveryFeatures = (title = '', description = '') => {
+  const text = `${title} ${description}`.toLowerCase();
+  const features = [];
+  if (includesAny(text, ['cookie', 'cookies'])) {
+    features.push('Cookies de sessão correspondentes à quantidade comprada');
+  } else if (includesAny(text, ['proxy', 'proxies'])) {
+    features.push('Dados de conexão correspondentes à quantidade comprada');
+  } else if (includesAny(text, [
+    'account', 'accounts', 'conta', 'contas', 'login', 'gmail', 'google', 'facebook',
+    'instagram', 'tiktok', 'twitter', 'reddit', 'discord', 'linkedin', 'telegram',
+    'pinterest', 'youtube', 'twitch', 'spotify', 'netflix', 'outlook', 'hotmail', 'yahoo',
+  ])) {
+    features.push('Credenciais de acesso correspondentes à quantidade comprada');
+  } else {
+    features.push('Item digital correspondente à quantidade comprada');
+  }
+  const inboxUnavailable = includesAny(text, ['no access', 'sem acesso', 'not included', 'não incluído']);
+  if (includesAny(text, ['email included', 'mail included', 'e-mail incluído']) && !inboxUnavailable) {
+    features.push('E-mail de acesso incluído');
+  } else if (includesAny(text, ['email verified', 'verified email', 'e-mail verificado']) && inboxUnavailable) {
+    features.push('E-mail verificado sem acesso à caixa, conforme anunciado');
+  }
+  if (text.includes('2fa')) features.push('Configuração de 2FA conforme a descrição do produto');
+  if (text.includes('token')) features.push('Token de acesso quando indicado na descrição');
+  features.push('Entrega digital após a confirmação do pagamento');
+  return [...new Set(features)];
+};
+
 const readAllSupplierProducts = async () => {
   const rows = [];
   const pageSize = 1000;
@@ -159,17 +187,26 @@ const slugify = value => String(value || '')
   .replace(/^-+|-+$/g, '');
 
 export const syncNpprCatalog = async settings => {
-  const [categories, productPayload] = await Promise.all([
+  const [categories, productPayload, existingCollectionsResult] = await Promise.all([
     callNppr(settings.api_key, '/categories'),
     callNppr(settings.api_key, '/products'),
+    supabaseAdmin.from('collections').select('supplier_collection_id,data').order('created_at'),
   ]);
+  if (existingCollectionsResult.error) throw existingCollectionsResult.error;
+  const existingCollections = existingCollectionsResult.data || [];
+  const existingCollectionData = new Map(existingCollections.map(collection => [
+    String(collection.supplier_collection_id || ''), collection.data || {},
+  ]));
+  const nextCollectionOrder = existingCollections.reduce((highest, collection) =>
+    Math.max(highest, Number(collection.data?.homeOrder ?? -1)), -1) + 1;
   const products = flattenProducts(productPayload);
   const activeCategoryIds = new Set(products
     .filter(product => Number(product.qty || 0) >= Math.max(1, Number(product.minimalOrder || 1)))
     .flatMap(product => [String(product.category)]));
-  const collectionRows = (Array.isArray(categories) ? categories : []).map(category => {
+  const collectionRows = (Array.isArray(categories) ? categories : []).map((category, index) => {
     const supplierCollectionId = String(category.slug || category.id);
     const name = localizeCatalogText(category.titleEn || category.titleRu || supplierCollectionId) || 'Produtos Digitais';
+    const existingData = existingCollectionData.get(supplierCollectionId) || {};
     return {
       supplier: 'nppr',
       supplier_collection_id: supplierCollectionId,
@@ -177,12 +214,14 @@ export const syncNpprCatalog = async settings => {
         activeCategoryIds.has(String(category.slug)) || activeCategoryIds.has(String(category.id))
       )),
       data: {
+        ...existingData,
         name,
         slug: `catalogo-${slugify(publicLabel(category.slug) || name || category.id)}`,
         description: `Produtos da coleção ${name}, com estoque e preços sincronizados automaticamente.`,
         badgeColor: 'bg-blue-50 text-blue-800 border-blue-200',
         supplier: 'nppr',
         supplierCollectionId,
+        homeOrder: Number(existingData.homeOrder ?? nextCollectionOrder + index),
       },
     };
   });
@@ -242,7 +281,7 @@ export const syncNpprCatalog = async settings => {
       stockQuantity: quantity,
       minimumOrder,
       tags: [categoryTitle],
-      features: [`Pedido mínimo: ${minimumOrder}`, `Estoque sincronizado: ${quantity}`],
+      features: deriveDeliveryFeatures(originalProductTitle, source.descriptionEn || source.descriptionRu || ''),
       downloadFileName: '',
       rating: Number(current?.data?.rating || 5),
       reviewsCount: Number(current?.data?.reviewsCount || 0),

@@ -30,7 +30,9 @@ export const ProductGrid: React.FC = () => {
   } = useStore();
 
   const activeProducts = products.filter(p => p.active);
-  const activeCollections = collections.filter(c => c.active);
+  const activeCollections = collections
+    .filter(c => c.active)
+    .sort((a, b) => Number(a.homeOrder ?? 9999) - Number(b.homeOrder ?? 9999));
 
   // =========================================================================
   // CASO 1: BUSCA GLOBAL ATIVA

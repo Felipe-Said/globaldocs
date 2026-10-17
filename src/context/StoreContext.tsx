@@ -5,7 +5,7 @@ import {
   Order, PaymentMethod, ProductType, StoreSettings,
 } from '../types';
 import { isValidTaxId, normalizeCustomerName, normalizeTaxId } from '../lib/customer-profile';
-import { deriveProductSubcategory, localizeCatalogText } from '../utils/catalogLocalization';
+import { deriveDeliveryFeatures, deriveProductSubcategory, localizeCatalogText } from '../utils/catalogLocalization';
 
 export interface CustomerUser { id: string; email: string; name?: string; document?: string }
 export interface WalletTransaction {
@@ -65,6 +65,7 @@ interface StoreContextType {
   deleteProduct: (id: string) => Promise<void>; toggleProductStatus: (id: string) => Promise<void>;
   collections: Collection[];
   addCollection: (value: Omit<Collection, 'id'>) => Promise<void>; updateCollection: (id: string, value: Partial<Collection>) => Promise<void>;
+  reorderCollections: (orderedIds: string[]) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
   searchQuery: string; setSearchQuery: (value: string) => void;
   selectedCategory: FileCategory | 'all'; setSelectedCategory: (value: FileCategory | 'all') => void;
@@ -109,7 +110,7 @@ const productFromRow = (row: any, deliverable?: Record<string, unknown>): Digita
     tagline: isSupplierProduct ? localizeCatalogText(source.tagline) : source.tagline,
     description: isSupplierProduct ? localizeCatalogText(source.description) : source.description,
     tags: isSupplierProduct ? (source.tags || []).map(localizeCatalogText) : (source.tags || []),
-    features: isSupplierProduct ? (source.features || []).map(localizeCatalogText) : (source.features || []),
+    features: isSupplierProduct ? deriveDeliveryFeatures(source.title, source.description) : (source.features || []),
     subcategory: source.subcategory || (isSupplierProduct ? deriveProductSubcategory(collectionHint, title) : undefined),
     id: row.id, active: row.active, isFeatured: row.featured,
     downloadsCount: Number(source.downloadsCount || 0), createdAt: row.created_at, updatedAt: row.updated_at,
@@ -123,7 +124,12 @@ const collectionFromRow = (row: any): Collection => ({
   description: row.supplier === 'nppr' ? localizeCatalogText(row.data?.description) : row.data?.description,
   id: row.id,
   active: row.active,
+  homeOrder: Number(row.data?.homeOrder ?? 9999),
 });
+const sortCollections = (values: Collection[]) => [...values].sort((a, b) =>
+  Number(a.homeOrder ?? 9999) - Number(b.homeOrder ?? 9999)
+  || a.name.localeCompare(b.name, 'pt-BR')
+);
 const bannerFromRow = (row: any): Banner => ({ ...row.data, id: row.id, active: row.active, order: row.sort_order });
 const couponFromRow = (row: any): Coupon => ({
   code: row.code, discountPercent: Number(row.discount_percent), active: row.active,
@@ -205,7 +211,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (response.ok) {
         const catalog = await response.json();
         applyProductRows(catalog.products || []);
-        setCollections((catalog.collections || []).map(collectionFromRow));
+        setCollections(sortCollections((catalog.collections || []).map(collectionFromRow)));
         setBanners((catalog.banners || []).map(bannerFromRow));
         setSettings({ ...DEFAULT_SETTINGS, ...(catalog.settings || {}) });
         return;
@@ -221,7 +227,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       supabase.from('store_settings').select('data').eq('id', 1).maybeSingle(),
     ]);
     if (!productResult.error) applyProductRows(productResult.data || []);
-    if (!collectionResult.error) setCollections((collectionResult.data || []).map(collectionFromRow));
+    if (!collectionResult.error) setCollections(sortCollections((collectionResult.data || []).map(collectionFromRow)));
     if (!bannerResult.error) setBanners((bannerResult.data || []).map(bannerFromRow));
     if (!settingsResult.error && settingsResult.data?.data) setSettings({ ...DEFAULT_SETTINGS, ...settingsResult.data.data });
     if (productResult.error || collectionResult.error || bannerResult.error || settingsResult.error) {
@@ -296,7 +302,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const deliverables = new Map((deliverableResult.data || []).map((row: any) => [row.product_id, row.data]));
     if (!productResult.error) applyProductRows(productResult.data || [], deliverables);
-    if (!collectionResult.error) setCollections((collectionResult.data || []).map(collectionFromRow));
+    if (!collectionResult.error) setCollections(sortCollections((collectionResult.data || []).map(collectionFromRow)));
     if (!bannerResult.error) {
       const bannerRows = bannerResult.data || [];
       setBanners(bannerRows.map(bannerFromRow));
@@ -617,9 +623,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toggleProductStatus = async (id: string) => { const item = products.find(value => value.id === id); if (item) await updateProduct(id, { active: !item.active }); };
 
   const addCollection = async (collection: Omit<Collection, 'id'>) => {
-    const { active, ...data } = collection; const { data: row, error } = await supabase.from('collections').insert({ data, active }).select('*').single();
+    const nextHomeOrder = collections.reduce((highest, item) => Math.max(highest, Number(item.homeOrder ?? -1)), -1) + 1;
+    const prepared = { ...collection, homeOrder: collection.homeOrder ?? nextHomeOrder };
+    const { active, ...data } = prepared; const { data: row, error } = await supabase.from('collections').insert({ data, active }).select('*').single();
     if (error || !row) return showToast(error?.message || 'Erro ao criar coleção.', 'error');
-    setCollections(value => [...value, collectionFromRow(row)]);
+    setCollections(value => sortCollections([...value, collectionFromRow(row)]));
     showToast(`Coleção "${collection.name}" criada.`);
   };
   const updateCollection = async (id: string, updates: Partial<Collection>) => {
@@ -627,8 +635,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const merged = { ...current, ...updates }; const { id: _id, active, ...data } = merged;
     const { error } = await supabase.from('collections').update({ data, active }).eq('id', id);
     if (error) return showToast(error.message, 'error');
-    setCollections(value => value.map(item => item.id === id ? merged : item));
+    setCollections(value => sortCollections(value.map(item => item.id === id ? merged : item)));
     showToast('Coleção atualizada.');
+  };
+  const reorderCollections = async (orderedIds: string[]) => {
+    const currentById = new Map(collections.map(item => [item.id, item]));
+    const reordered = orderedIds.map((id, homeOrder) => ({ ...currentById.get(id)!, homeOrder })).filter(Boolean);
+    const results = await Promise.all(reordered.map(collection => {
+      const { id, active: _active, ...data } = collection;
+      return supabase.from('collections').update({ data }).eq('id', id);
+    }));
+    const failed = results.find(result => result.error)?.error;
+    if (failed) return showToast(failed.message, 'error');
+    setCollections(sortCollections(reordered));
+    showToast('Ordem das coleções atualizada.');
   };
   const deleteCollection = async (id: string) => {
     const { error } = await supabase.from('collections').delete().eq('id', id);
@@ -745,7 +765,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     refreshCustomerOrders, customerLogout,
     isAdminAuthenticated, adminLogin, adminLogout,
     products, addProduct, updateProduct, deleteProduct, toggleProductStatus,
-    collections, addCollection, updateCollection, deleteCollection,
+    collections, addCollection, updateCollection, reorderCollections, deleteCollection,
     searchQuery, setSearchQuery, selectedCategory, setSelectedCategory, selectedProductType, setSelectedProductType,
     selectedCollectionId, setSelectedCollectionId, selectedFormat, setSelectedFormat, sortBy, setSortBy,
     cart, addToCart, removeFromCart, updateCartQuantity, clearCart, cartCount: cart.length,
