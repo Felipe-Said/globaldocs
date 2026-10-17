@@ -60,14 +60,18 @@ export const syncNpprCatalog = async settings => {
     callNppr(settings.api_key, '/products'),
   ]);
   const products = flattenProducts(productPayload);
-  const supplierActive = Boolean(settings.enabled && settings.auto_fulfill && settings.publish_products);
+  const activeCategoryIds = new Set(products
+    .filter(product => Number(product.qty || 0) >= Math.max(1, Number(product.minimalOrder || 1)))
+    .flatMap(product => [String(product.category)]));
   const collectionRows = (Array.isArray(categories) ? categories : []).map(category => {
     const supplierCollectionId = String(category.slug || category.id);
     const name = category.titleEn || category.titleRu || supplierCollectionId;
     return {
       supplier: 'nppr',
       supplier_collection_id: supplierCollectionId,
-      active: supplierActive,
+      active: Boolean(settings.publish_products && (
+        activeCategoryIds.has(String(category.slug)) || activeCategoryIds.has(String(category.id))
+      )),
       data: {
         name,
         slug: `nppr-${slugify(category.slug || name || category.id)}`,
@@ -141,7 +145,7 @@ export const syncNpprCatalog = async settings => {
       supplierPriceUsd: Number(source.priceUsd),
       supplierUpdatedAt: source.updatedAt || null,
     };
-    const active = Boolean(supplierActive && quantity >= minimumOrder);
+    const active = Boolean(settings.publish_products && quantity >= minimumOrder);
     rows.push({
       supplier: 'nppr',
       supplier_product_id: supplierProductId,

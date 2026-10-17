@@ -516,7 +516,7 @@ export const AdminAPIs: React.FC = () => {
                 {[
                   ['enabled', 'Ativar integração', 'Permite consultas e sincronizações.'],
                   ['autoFulfill', 'Entrega automática', 'Compra no fornecedor após pagamento confirmado.'],
-                  ['publishProducts', 'Publicar sincronizados', 'Deixa disponíveis os itens com estoque.'],
+                  ['publishProducts', 'Publicar produtos com estoque', 'Ativa automaticamente os itens disponíveis e suas coleções.'],
                 ].map(([field, label, help]) => (
                   <label key={field} className="flex items-start gap-2 rounded-md border border-borderSoft p-3 cursor-pointer">
                     <input type="checkbox" checked={Boolean(nppr[field as keyof typeof nppr])} onChange={event => setNppr(value => ({ ...value, [field]: event.target.checked }))} className="mt-0.5 accent-primary" />
@@ -526,7 +526,7 @@ export const AdminAPIs: React.FC = () => {
               </div>
 
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-900">
-                A entrega automática usa o saldo da conta do fornecedor. Produtos só são publicados automaticamente quando os três controles acima estiverem ativos; pedidos repetidos são bloqueados por idempotência.
+                Produtos com estoque podem ser publicados independentemente da entrega automática. Para comprar e entregar credenciais sem intervenção, mantenha também a integração e a entrega automática ativas; pedidos repetidos são bloqueados por idempotência.
               </div>
 
               {testResult?.id === 'nppr' && (
