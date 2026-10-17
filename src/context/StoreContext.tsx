@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   Banner, CartItem, Collection, Coupon, DigitalProduct, FileCategory, FileFormat,
@@ -151,9 +151,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [selectedFormat, setSelectedFormat] = useState<FileFormat | 'all'>('all');
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'popular' | 'newest'>('featured');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
+  const hasLoadedProducts = useRef(false);
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ message, type }); window.setTimeout(() => setToast(null), 3500);
+  };
+
+  const applyProductRows = (rows: any[], deliverables?: Map<string, Record<string, unknown>>) => {
+    const mapped = rows.map((row: any) => productFromRow(row, deliverables?.get(row.id)));
+    if (mapped.length > 0) {
+      hasLoadedProducts.current = true;
+      setProducts(mapped);
+      return;
+    }
+    if (!hasLoadedProducts.current) setProducts([]);
   };
 
   const loadStoreData = async () => {
@@ -161,7 +172,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const response = await fetch('/api/nppr?action=catalog', { cache: 'no-store' });
       if (response.ok) {
         const catalog = await response.json();
-        setProducts((catalog.products || []).map((row: any) => productFromRow(row)));
+        applyProductRows(catalog.products || []);
         setCollections((catalog.collections || []).map(collectionFromRow));
         setBanners((catalog.banners || []).map(bannerFromRow));
         setSettings({ ...DEFAULT_SETTINGS, ...(catalog.settings || {}) });
@@ -177,7 +188,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       supabase.from('banners').select('*').order('sort_order'),
       supabase.from('store_settings').select('data').eq('id', 1).maybeSingle(),
     ]);
-    if (!productResult.error) setProducts((productResult.data || []).map((row: any) => productFromRow(row)));
+    if (!productResult.error) applyProductRows(productResult.data || []);
     if (!collectionResult.error) setCollections((collectionResult.data || []).map(collectionFromRow));
     if (!bannerResult.error) setBanners((bannerResult.data || []).map(bannerFromRow));
     if (!settingsResult.error && settingsResult.data?.data) setSettings({ ...DEFAULT_SETTINGS, ...settingsResult.data.data });
@@ -252,7 +263,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (hasStoreError) showToast('Alguns dados do painel não puderam ser atualizados.', 'error');
 
     const deliverables = new Map((deliverableResult.data || []).map((row: any) => [row.product_id, row.data]));
-    if (!productResult.error) setProducts((productResult.data || []).map((row: any) => productFromRow(row, deliverables.get(row.id))));
+    if (!productResult.error) applyProductRows(productResult.data || [], deliverables);
     if (!collectionResult.error) setCollections((collectionResult.data || []).map(collectionFromRow));
     if (!bannerResult.error) {
       const bannerRows = bannerResult.data || [];
