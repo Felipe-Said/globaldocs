@@ -22,7 +22,7 @@ export function DashboardInvoices() {
 	const { orders } = useStore();
 
 	return (
-		<Card className="rounded-none bg-background shadow-none ring-0 lg:col-span-3">
+		<Card className="rounded-none bg-background shadow-none ring-0 sm:col-span-2 xl:col-span-4">
 			<CardHeader className="flex flex-row items-center justify-between">
 				<div>
 					<CardTitle>Vendas & Pedidos Recentes</CardTitle>
@@ -70,6 +70,7 @@ export function DashboardInvoices() {
 										{order.paymentMethod}
 									</TableCell>
 									<TableCell>
+										<div className="flex flex-col items-start gap-1">
 										<Badge
 											variant={isPaid ? "secondary" : "outline"}
 											className={
@@ -80,6 +81,12 @@ export function DashboardInvoices() {
 										>
 											{isPaid ? "Aprovado" : "Pendente"}
 										</Badge>
+										{isPaid && order.items.some((item) => item.requiresFulfillment) && order.fulfillmentStatus !== "completed" && (
+											<Badge variant="outline" className={order.fulfillmentIssue === "insufficient_balance" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-blue-200 bg-blue-50 text-blue-700"}>
+												{order.fulfillmentIssue === "insufficient_balance" ? "Saldo insuficiente" : "Envio pendente"}
+											</Badge>
+										)}
+										</div>
 									</TableCell>
 									<TableCell className="pr-6 text-right font-medium text-xs">
 										{order.total.toLocaleString("pt-BR", {
