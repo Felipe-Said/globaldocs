@@ -318,9 +318,28 @@ const formatDeliveredItems = items => (Array.isArray(items) ? items : [])
   .map((item, index) => `${index + 1}. ${item}`)
   .join('\n');
 
-export const fulfillNpprOrder = async orderId => {
+const updateOrderItemDelivery = async (orderId, productId, deliveryStatus, deliveredItems) => {
+  const { data: order, error } = await supabaseAdmin.from('orders').select('items').eq('id', orderId).single();
+  if (error) throw error;
+  const nextItems = (order.items || []).map(item => item.productId === productId ? {
+    ...item,
+    requiresFulfillment: true,
+    deliveryStatus,
+    ...(deliveredItems ? {
+      accessLogins: formatDeliveredItems(deliveredItems),
+      accessInstructions: 'Credenciais entregues automaticamente após a confirmação do pagamento.',
+    } : {}),
+  } : item);
+  const { error: updateError } = await supabaseAdmin.from('orders').update({ items: nextItems }).eq('id', orderId);
+  if (updateError) throw updateError;
+};
+
+const isInsufficientBalanceError = error => /not enough balance|insufficient balance/i.test(String(error?.message || ''));
+
+export const fulfillNpprOrder = async (orderId, options = {}) => {
   const settings = await getNpprSettings();
-  if (!settings.enabled || !settings.auto_fulfill || !settings.api_key) return { skipped: true };
+  if (!settings.enabled || !settings.api_key) return { skipped: true, completed: 0, failed: 0 };
+  if (!settings.auto_fulfill && !options.force) return { skipped: true, completed: 0, failed: 0 };
   const { data: order, error: orderError } = await supabaseAdmin.from('orders').select('*').eq('id', orderId).single();
   if (orderError) throw orderError;
   if (order.status !== 'paid') return { skipped: true };
@@ -330,6 +349,8 @@ export const fulfillNpprOrder = async orderId => {
   if (productsError) throw productsError;
   const productById = new Map((products || []).map(product => [product.id, product]));
   let completed = 0;
+  let failed = 0;
+  let insufficientBalance = false;
 
   for (const orderItem of order.items || []) {
     const product = productById.get(orderItem.productId);
@@ -341,31 +362,47 @@ export const fulfillNpprOrder = async orderId => {
       quantity: Number(orderItem.quantity || 1),
       status: 'processing',
     };
-    const { data: claim, error: claimError } = await supabaseAdmin
-      .from('nppr_fulfillments').insert(fulfillment).select('*').single();
-    if (claimError) {
-      if (claimError.code === '23505') continue;
-      throw claimError;
+    const { data: existing, error: existingError } = await supabaseAdmin.from('nppr_fulfillments')
+      .select('*').eq('order_id', order.id).eq('product_id', product.id).maybeSingle();
+    if (existingError) throw existingError;
+    if (existing?.status === 'completed') {
+      await updateOrderItemDelivery(order.id, product.id, 'delivered', existing.delivered_items || []);
+      continue;
     }
+    let claim = existing;
+    if (existing) {
+      const { data, error } = await supabaseAdmin.from('nppr_fulfillments').update({
+        status: 'processing', quantity: fulfillment.quantity, error_message: null, failure_code: null,
+      }).eq('id', existing.id).select('*').single();
+      if (error) throw error;
+      claim = data;
+    } else {
+      const { data, error } = await supabaseAdmin.from('nppr_fulfillments').insert(fulfillment).select('*').single();
+      if (error) throw error;
+      claim = data;
+    }
+    await updateOrderItemDelivery(order.id, product.id, 'processing');
     try {
       const supplierOrder = await callNppr(settings.api_key, '/order', {
         method: 'POST',
         body: JSON.stringify({ productId: fulfillment.supplier_product_id, qty: fulfillment.quantity }),
       });
       await supabaseAdmin.from('nppr_fulfillments').update({
-        status: 'completed', supplier_order_id: String(supplierOrder.orderId || ''), delivered_items: supplierOrder.items || [], error_message: null,
+        status: 'completed', supplier_order_id: String(supplierOrder.orderId || ''), delivered_items: supplierOrder.items || [], error_message: null, failure_code: null,
       }).eq('id', claim.id);
-      const { data: freshOrder } = await supabaseAdmin.from('orders').select('items').eq('id', order.id).single();
-      const nextItems = (freshOrder?.items || []).map(item => item.productId === product.id ? {
-        ...item,
-        accessLogins: formatDeliveredItems(supplierOrder.items),
-        accessInstructions: 'Credenciais entregues automaticamente após a confirmação do pagamento.',
-      } : item);
-      await supabaseAdmin.from('orders').update({ items: nextItems }).eq('id', order.id);
+      await updateOrderItemDelivery(order.id, product.id, 'delivered', supplierOrder.items || []);
       completed += 1;
     } catch (error) {
-      await supabaseAdmin.from('nppr_fulfillments').update({ status: 'failed', error_message: error.message }).eq('id', claim.id);
+      const balanceFailure = isInsufficientBalanceError(error);
+      await supabaseAdmin.from('nppr_fulfillments').update({
+        status: 'failed',
+        error_message: error.message,
+        failure_code: balanceFailure ? 'insufficient_balance' : 'provider_error',
+      }).eq('id', claim.id);
+      await updateOrderItemDelivery(order.id, product.id, 'processing');
+      failed += 1;
+      insufficientBalance ||= balanceFailure;
     }
   }
-  return { skipped: false, completed };
+  return { skipped: false, completed, failed, insufficientBalance };
 };

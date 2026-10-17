@@ -46,17 +46,56 @@ export default async function handler(request, response) {
       });
     }
     if (request.method === 'POST' && body.action === 'fulfill') {
+      const admin = await requireAdmin(request);
+      if (admin) {
+        const orderId = String(body.orderId || '');
+        const { data: order } = await supabaseAdmin.from('orders').select('id').eq('id', orderId).eq('status', 'paid').maybeSingle();
+        if (!order) return json(response, 404, { error: 'Pedido pago não encontrado.' });
+        const result = await fulfillNpprOrder(order.id, { force: true });
+        return json(response, 200, {
+          success: result.failed === 0 && !result.skipped,
+          ...result,
+          message: result.insufficientBalance
+            ? 'Saldo da integração insuficiente. Adicione saldo e tente novamente.'
+            : result.failed > 0
+              ? 'Alguns itens não puderam ser processados. Consulte o aviso do pedido.'
+              : result.skipped
+                ? 'A integração está desativada ou sem credencial. Revise a configuração e tente novamente.'
+                : result.completed > 0 ? 'Pedido processado e entrega liberada.' : 'Nenhum item aguardava processamento.',
+        });
+      }
       const customer = await requireCustomer(request);
       if (!customer) return json(response, 401, { error: 'Sessão do cliente inválida.' });
       const orderId = String(body.orderId || '');
       const { data: order } = await supabaseAdmin.from('orders').select('id').eq('id', orderId).eq('customer_user_id', customer.id).eq('status', 'paid').maybeSingle();
       if (!order) return json(response, 404, { error: 'Pedido pago não encontrado.' });
-      return json(response, 200, await fulfillNpprOrder(order.id));
+      const result = await fulfillNpprOrder(order.id);
+      return json(response, 200, { processing: result.failed > 0 || result.skipped, completed: result.completed });
     }
 
     if (!await requireAdmin(request)) return json(response, 401, { error: 'Sessão administrativa inválida.' });
     const current = await getNpprSettings();
-    if (request.method === 'GET') return json(response, 200, publicSettings(current));
+    if (request.method === 'GET') {
+      const [{ data: fulfillments, error: fulfillmentError }, balanceResult] = await Promise.all([
+        supabaseAdmin.from('nppr_fulfillments').select('order_id,product_id,status,failure_code,error_message,updated_at').order('updated_at', { ascending: false }).limit(2000),
+        current.enabled && current.api_key
+          ? callNppr(current.api_key, '/balance').then(data => ({ data })).catch(error => ({ error }))
+          : Promise.resolve({ data: null }),
+      ]);
+      if (fulfillmentError) throw fulfillmentError;
+      return json(response, 200, {
+        ...publicSettings(current),
+        balance: balanceResult.data ? {
+          currency: balanceResult.data.currency || 'USD',
+          primary: Number(balanceResult.data.primaryBalance || 0),
+          cashback: Number(balanceResult.data.cashbackBalance || 0),
+          total: Number(balanceResult.data.totalBalance || 0),
+          fetchedAt: new Date().toISOString(),
+        } : null,
+        balanceError: balanceResult.error ? 'Não foi possível consultar o saldo agora.' : null,
+        fulfillments: fulfillments || [],
+      });
+    }
     if (request.method !== 'POST') return json(response, 405, { error: 'Método não permitido.' });
     const apiKey = String(body.apiKey || '').trim() || current.api_key;
 

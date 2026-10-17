@@ -434,6 +434,10 @@ export const CartDrawer: React.FC = () => {
           ? `Valor mínimo insuficiente — mínimo ${minimumLabel} USDT`
           : 'Avançar para Identificação';
 
+  const completedHasProcessing = Boolean(completedOrder?.items.some((item) =>
+    item.requiresFulfillment && item.deliveryStatus !== 'delivered' && !item.accessLogins
+  ));
+
   return (
     <div 
       className={`fixed inset-0 z-50 overflow-hidden flex items-end sm:items-stretch justify-end transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
@@ -1283,17 +1287,25 @@ export const CartDrawer: React.FC = () => {
             <div className="h-full flex flex-col flex-1 p-5 sm:p-6 overflow-y-auto space-y-5 animate-fadeIn">
               
               <div className="text-center pt-2">
-                <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center mb-3 shadow-sm animate-bounce">
-                  <CheckCircle2 className="w-9 h-9 stroke-[2.5]" />
+                <div className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center mb-3 shadow-sm ${completedHasProcessing ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600 animate-bounce'}`}>
+                  {completedHasProcessing ? (
+                    <RefreshCw className="w-8 h-8 stroke-[2.5] animate-spin" aria-hidden="true" />
+                  ) : (
+                    <CheckCircle2 className="w-9 h-9 stroke-[2.5]" aria-hidden="true" />
+                  )}
                 </div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
-                  Pagamento Aprovado Instantaneamente
+                <span className={`text-[11px] font-semibold uppercase tracking-wider px-3 py-1 rounded-full border ${completedHasProcessing ? 'text-blue-700 bg-blue-50 border-blue-100' : 'text-emerald-700 bg-emerald-50 border-emerald-100'}`}>
+                  {completedHasProcessing ? 'Pagamento aprovado • envio em processamento' : 'Pagamento aprovado instantaneamente'}
                 </span>
                 <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">
                   Obrigado, {completedOrder.customerName}!
                 </h3>
                 <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto">
-                  Seu pedido <strong>#{completedOrder.id}</strong> foi registrado e os acessos liberados abaixo.
+                  {completedHasProcessing ? (
+                    <>Seu pedido <strong>#{completedOrder.id}</strong> foi confirmado. Estamos processando o envio e o acesso aparecerá na sua conta assim que estiver pronto.</>
+                  ) : (
+                    <>Seu pedido <strong>#{completedOrder.id}</strong> foi registrado e os acessos foram liberados abaixo.</>
+                  )}
                 </p>
               </div>
 
@@ -1316,10 +1328,12 @@ export const CartDrawer: React.FC = () => {
               {/* Lista de Itens com Acesso Imediato */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                  Seus Arquivos & Acessos Liberados:
+                  {completedHasProcessing ? 'Status dos seus itens:' : 'Seus arquivos & acessos liberados:'}
                 </h4>
 
-                {completedOrder.items.map((item, idx) => (
+                {completedOrder.items.map((item, idx) => {
+                  const waitingDelivery = item.requiresFulfillment && item.deliveryStatus !== 'delivered' && !item.accessLogins;
+                  return (
                   <div 
                     key={idx}
                     className="bg-white border border-gray-200 p-3.5 rounded-xl space-y-2 shadow-2xs"
@@ -1334,14 +1348,20 @@ export const CartDrawer: React.FC = () => {
                         </h5>
                       </div>
                       
-                      {/* Botão de Download */}
-                      <button
-                        onClick={() => downloadFile(item.productTitle, item.downloadFileName || `${item.productTitle}.pdf`, item.format)}
-                        className="px-3 py-1.5 bg-black hover:bg-neutral-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Baixar</span>
-                      </button>
+                      {waitingDelivery ? (
+                        <span className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold flex items-center gap-2 shrink-0" role="status">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                          Processando envio...
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => downloadFile(item.productTitle, item.downloadFileName || `${item.productTitle}.pdf`, item.format)}
+                          className="min-h-11 px-3 py-1.5 bg-black hover:bg-neutral-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                        >
+                          <Download className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>Baixar</span>
+                        </button>
+                      )}
                     </div>
 
                     {/* Pronta Entrega: ZIP adicional */}
@@ -1404,7 +1424,8 @@ export const CartDrawer: React.FC = () => {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Botões de Ação Final */}

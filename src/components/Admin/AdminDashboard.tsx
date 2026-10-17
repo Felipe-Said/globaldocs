@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../../context/StoreContext';
+import { supabase } from '../../lib/supabase';
 import { 
   DollarSign, 
   ShoppingBag, 
@@ -11,11 +12,22 @@ import {
   Plus, 
   Tag, 
   FolderTree,
-  SlidersHorizontal 
+  SlidersHorizontal,
+  WalletCards,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 interface AdminDashboardProps {
-  onNavigateTab?: (tab: 'overview' | 'products' | 'collections' | 'orders' | 'coupons' | 'settings') => void;
+  onNavigateTab?: (tab: 'overview' | 'products' | 'collections' | 'orders' | 'coupons' | 'apis' | 'settings') => void;
+}
+
+interface IntegrationBalance {
+  currency: string;
+  primary: number;
+  cashback: number;
+  total: number;
+  fetchedAt: string;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab }) => {
@@ -25,6 +37,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
     collections,
     updateOrderStatus 
   } = useStore();
+  const [integrationBalance, setIntegrationBalance] = useState<IntegrationBalance | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
+  const [balanceError, setBalanceError] = useState('');
+
+  const refreshIntegrationBalance = useCallback(async () => {
+    setBalanceLoading(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error('Sessão administrativa expirada.');
+      const response = await fetch('/api/nppr', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Não foi possível consultar o saldo.');
+      setIntegrationBalance(result.balance || null);
+      setBalanceError(result.balanceError || (!result.balance ? 'Saldo indisponível.' : ''));
+    } catch (error) {
+      setBalanceError(error instanceof Error ? error.message : 'Saldo indisponível.');
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshIntegrationBalance();
+    const interval = window.setInterval(() => void refreshIntegrationBalance(), 30000);
+    return () => window.clearInterval(interval);
+  }, [refreshIntegrationBalance]);
 
   const totalRevenue = orders
     .filter(o => o.status === 'paid')
@@ -41,7 +83,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {/* Metric 1 */}
         <div className="bg-surface p-5 rounded-md border border-borderSoft shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-ink-muted text-xs">
@@ -112,6 +154,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
             <div className="text-[11px] text-ink-muted mt-1">
               Arquivos, LLC & Remessas
             </div>
+          </div>
+        </div>
+
+        {/* Private integration balance — never rendered on the storefront */}
+        <div className={`bg-surface p-5 rounded-md border shadow-xs flex flex-col justify-between ${balanceError ? 'border-rose-200' : integrationBalance?.total === 0 ? 'border-amber-200' : 'border-borderSoft'}`}>
+          <div className="flex items-center justify-between gap-3 text-ink-muted text-xs">
+            <span>Saldo da Integração</span>
+            <button
+              type="button"
+              onClick={() => void refreshIntegrationBalance()}
+              disabled={balanceLoading}
+              aria-label="Atualizar saldo da integração"
+              className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-sm bg-violet-50 text-violet-700 transition-colors hover:bg-violet-100 disabled:cursor-wait disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${balanceLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            </button>
+          </div>
+          <div className="mt-2" aria-live="polite">
+            {balanceError ? (
+              <div className="flex items-start gap-2 text-xs leading-relaxed text-rose-700">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{balanceError}</span>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold tabular-nums text-ink tracking-tight">
+                  {balanceLoading && !integrationBalance ? '—' : `${Number(integrationBalance?.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${integrationBalance?.currency || 'USD'}`}
+                </div>
+                <div className={`mt-1 flex items-center gap-1 text-[11px] ${integrationBalance?.total === 0 ? 'text-amber-700' : 'text-ink-muted'}`}>
+                  <WalletCards className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{integrationBalance?.fetchedAt ? `Atualizado às ${new Date(integrationBalance.fetchedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Consulta em tempo real'}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -206,20 +282,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
                       {order.paymentMethod === 'wallet' ? 'Carteira' : order.paymentMethod}
                     </td>
                     <td className="py-3 px-4">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        isPaid 
-                          ? 'bg-success-tint text-success' 
-                          : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {isPaid ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                        {isPaid ? 'Pago' : 'Pendente'}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          isPaid
+                            ? 'bg-success-tint text-success'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {isPaid ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                          {isPaid ? 'Pago' : 'Pendente'}
+                        </span>
+                        {isPaid && order.fulfillmentStatus !== 'completed' && order.items.some((item) => item.requiresFulfillment) && (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${order.fulfillmentIssue === 'insufficient_balance' ? 'bg-rose-50 text-rose-700' : 'bg-blue-50 text-blue-700'}`}>
+                            {order.fulfillmentIssue === 'insufficient_balance' ? <AlertCircle className="h-3 w-3" aria-hidden="true" /> : <RefreshCw className="h-3 w-3" aria-hidden="true" />}
+                            {order.fulfillmentIssue === 'insufficient_balance' ? 'Saldo insuficiente' : 'Envio pendente'}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {!isPaid && (
+                      {isPaid && order.fulfillmentStatus !== 'completed' && order.items.some((item) => item.requiresFulfillment) ? (
+                        <button
+                          onClick={() => onNavigateTab?.('orders')}
+                          className="min-h-11 px-3 text-primary hover:underline text-[11px] font-semibold cursor-pointer"
+                        >
+                          Ver pedido
+                        </button>
+                      ) : !isPaid && (
                         <button
                           onClick={() => updateOrderStatus(order.id, 'paid')}
-                          className="px-2 py-1 bg-success-tint hover:bg-success hover:text-white text-success rounded text-[11px] font-medium transition-colors cursor-pointer"
+                          className="min-h-11 px-3 bg-success-tint hover:bg-success hover:text-white text-success rounded text-[11px] font-medium transition-colors cursor-pointer"
                         >
                           Aprovar
                         </button>

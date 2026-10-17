@@ -79,6 +79,7 @@ interface StoreContextType {
   cartCount: number; subtotal: number; discount: number; total: number;
   appliedCoupon: Coupon | null; applyCoupon: (code: string) => Promise<Result>; removeCoupon: () => void;
   orders: Order[];
+  refreshAdminData: () => Promise<void>;
   createOrder: (value: { customerName: string; customerEmail: string; customerDocument: string; shippingAddress?: string; paymentMethod: PaymentMethod }) => Promise<Order | null>;
   updateOrderStatus: (id: string, status: Order['status']) => Promise<void>;
   coupons: Coupon[]; addCoupon: (value: Omit<Coupon, 'usageCount'>) => Promise<void>;
@@ -142,6 +143,22 @@ const orderFromRow = (row: any): Order => ({
   appliedCoupon: row.applied_coupon || undefined, paymentMethod: row.payment_method,
   status: row.status, downloadToken: row.download_token, trackingCode: row.tracking_code || undefined,
   createdAt: row.created_at,
+});
+const applyAdminFulfillmentState = (values: Order[], fulfillments: any[]): Order[] => values.map(order => {
+  const requiredItems = order.items.filter(item => item.requiresFulfillment);
+  if (!requiredItems.length) return order;
+  const requiredProductIds = new Set(requiredItems.map(item => item.productId));
+  const records = fulfillments.filter(item => item.order_id === order.id && requiredProductIds.has(item.product_id));
+  const insufficient = records.find(item => item.status === 'failed' && item.failure_code === 'insufficient_balance');
+  const failed = records.find(item => item.status === 'failed');
+  const completedIds = new Set(records.filter(item => item.status === 'completed').map(item => item.product_id));
+  const allCompleted = requiredItems.every(item => item.deliveryStatus === 'delivered' || completedIds.has(item.productId));
+  return {
+    ...order,
+    fulfillmentStatus: allCompleted ? 'completed' : failed ? 'failed' : 'processing',
+    fulfillmentIssue: insufficient ? 'insufficient_balance' : failed ? 'provider_error' : undefined,
+    fulfillmentMessage: failed?.error_message || undefined,
+  };
 });
 const splitProduct = (product: Partial<DigitalProduct>) => {
   const publicData: Record<string, unknown> = { ...product };
@@ -314,7 +331,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
     if (!settingsResult.error && settingsResult.data?.data) setSettings({ ...DEFAULT_SETTINGS, ...settingsResult.data.data });
-    if (!orderResult.error) setOrders((orderResult.data || []).map(orderFromRow));
+    if (!orderResult.error) {
+      const mappedOrders = (orderResult.data || []).map(orderFromRow);
+      setOrders(mappedOrders);
+      void supabase.auth.getSession().then(async ({ data }) => {
+        const token = data.session?.access_token;
+        if (!token) return;
+        try {
+          const response = await fetch('/api/nppr', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+          if (!response.ok) return;
+          const integration = await response.json();
+          setOrders(applyAdminFulfillmentState(mappedOrders, integration.fulfillments || []));
+        } catch {
+          // O painel continua utilizável mesmo se a integração estiver temporariamente indisponível.
+        }
+      });
+    }
     if (!couponResult.error) setCoupons((couponResult.data || []).map(couponFromRow));
   };
 
@@ -770,7 +802,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     selectedCollectionId, setSelectedCollectionId, selectedFormat, setSelectedFormat, sortBy, setSortBy,
     cart, addToCart, removeFromCart, updateCartQuantity, clearCart, cartCount: cart.length,
     subtotal, discount, total, appliedCoupon, applyCoupon, removeCoupon,
-    orders, createOrder, updateOrderStatus, coupons, addCoupon, toggleCoupon, deleteCoupon,
+    orders, refreshAdminData: loadAdminData, createOrder, updateOrderStatus, coupons, addCoupon, toggleCoupon, deleteCoupon,
     banners, addBanner, updateBanner, deleteBanner, toggleBannerStatus,
     settings, updateSettings, downloadFile, toast, showToast,
   }}>{children}</StoreContext.Provider>;

@@ -97,6 +97,8 @@ export interface Order {
     proxyDetails?: string;
     accessInstructions?: string;
     quantity?: number;
+    requiresFulfillment?: boolean;
+    deliveryStatus?: 'processing' | 'delivered';
   }[];
   total: number;
   discount: number;
@@ -105,6 +107,9 @@ export interface Order {
   status: OrderStatus;
   downloadToken: string;
   trackingCode?: string;
+  fulfillmentStatus?: 'processing' | 'completed' | 'failed';
+  fulfillmentIssue?: 'insufficient_balance' | 'provider_error';
+  fulfillmentMessage?: string;
   createdAt: string;
 }
 

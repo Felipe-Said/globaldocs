@@ -8,6 +8,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useStore, type WalletTopUpPayment } from '../context/StoreContext';
 import { formatTaxId } from '../lib/customer-profile';
+import type { Order } from '../types';
 import { MonkeyLoginAvatar } from './MonkeyLoginAvatar';
 import { UsdtEstimate } from './UsdtEstimate';
 import { CustomerDashboardSidebar, type CustomerPanelView } from './ui/dashboard-sidebar';
@@ -217,14 +218,16 @@ export const MyDownloadsView: React.FC = () => {
     : [], [customerUser, orders]);
   const paidOrders = myOrders.filter(order => order.status === 'paid');
   const pendingOrders = myOrders.filter(order => order.status === 'pending');
-  const downloadCount = paidOrders.reduce((total, order) => total + order.items.length, 0);
+  const itemIsDelivered = (item: Order['items'][number]) => !item.requiresFulfillment || item.deliveryStatus === 'delivered' || Boolean(item.accessLogins);
+  const orderIsProcessing = (order: Order) => order.status === 'paid' && order.items.some(item => !itemIsDelivered(item));
+  const downloadCount = paidOrders.reduce((total, order) => total + order.items.filter(itemIsDelivered).length, 0);
   const filteredOrders = myOrders.filter(order => {
     const query = filterQuery.toLowerCase().trim();
     return !query || order.id.toLowerCase().includes(query) || order.items.some(item => item.productTitle.toLowerCase().includes(query));
   });
   const filteredDownloads = paidOrders.flatMap(order => order.items.map((item, index) => ({ order, item, index }))).filter(({ order, item }) => {
     const query = filterQuery.toLowerCase().trim();
-    return !query || order.id.toLowerCase().includes(query) || item.productTitle.toLowerCase().includes(query);
+    return itemIsDelivered(item) && (!query || order.id.toLowerCase().includes(query) || item.productTitle.toLowerCase().includes(query));
   });
 
   const selectView = (view: CustomerPanelView) => {
@@ -416,7 +419,42 @@ export const MyDownloadsView: React.FC = () => {
 
                 {activeView === 'orders' && (filteredOrders.length === 0 ? (
                   <section className="rounded-2xl border border-borderSoft bg-white p-10 text-center"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-warm text-ink-muted"><FileText className="h-6 w-6" aria-hidden="true" /></div><h2 className="font-semibold text-ink">Nenhum pedido encontrado</h2><p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">{filterQuery ? 'Tente buscar por outro termo.' : 'Quando você concluir uma compra, o pedido aparecerá aqui automaticamente.'}</p></section>
-                ) : <div className="space-y-4">{filteredOrders.map(order => { const isPaid = order.status === 'paid'; return <article key={order.id} className="overflow-hidden rounded-2xl border border-borderSoft bg-white shadow-xs"><header className="flex flex-col gap-3 border-b border-borderSoft bg-surface-warm p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="flex flex-wrap items-center gap-2 text-xs"><span className="font-mono font-bold text-ink">{order.id}</span><span className="text-ink-faint">•</span><span className="flex items-center gap-1 text-ink-muted"><Calendar className="h-3.5 w-3.5" aria-hidden="true" /> {new Date(order.createdAt).toLocaleDateString('pt-BR')}</span></div><div className="flex flex-wrap items-center gap-3 text-xs"><span className="text-ink-muted">Total: <strong className="text-ink">{order.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span><span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{isPaid ? <CheckCircle className="h-3 w-3" aria-hidden="true" /> : <Clock className="h-3 w-3" aria-hidden="true" />}{isPaid ? 'Pago e liberado' : 'Aguardando pagamento'}</span></div></header><div className="divide-y divide-borderSoft">{order.items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="flex min-w-0 items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-borderSoft bg-surface-warm text-primary"><FileText className="h-4 w-4" aria-hidden="true" /></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-ink">{item.productTitle}</h3>{getItemTypeBadge(item.productType)}</div><p className="mt-1 text-xs text-ink-muted">{item.format}</p></div></div>{isPaid ? <button type="button" onClick={() => selectView('downloads')} className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-borderSoft px-4 text-xs font-semibold text-ink transition-colors hover:bg-surface-warm"><Download className="h-4 w-4" aria-hidden="true" /> Abrir biblioteca</button> : <span className="inline-flex min-h-11 items-center gap-1.5 self-start rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-800"><Clock className="h-3.5 w-3.5" aria-hidden="true" /> Liberação após pagamento</span>}</div>)}</div></article>; })}</div>)}
+                ) : (
+                  <div className="space-y-4">
+                    {filteredOrders.map(order => {
+                      const isPaid = order.status === 'paid';
+                      const processing = orderIsProcessing(order);
+                      return (
+                        <article key={order.id} className="overflow-hidden rounded-2xl border border-borderSoft bg-white shadow-xs">
+                          <header className="flex flex-col gap-3 border-b border-borderSoft bg-surface-warm p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                              <span className="font-mono font-bold text-ink">{order.id}</span><span className="text-ink-faint">•</span>
+                              <span className="flex items-center gap-1 text-ink-muted"><Calendar className="h-3.5 w-3.5" aria-hidden="true" /> {new Date(order.createdAt).toLocaleDateString('pt-BR')}</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 text-xs">
+                              <span className="text-ink-muted">Total: <strong className="text-ink">{order.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span>
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${isPaid && !processing ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                {isPaid && !processing ? <CheckCircle className="h-3 w-3" aria-hidden="true" /> : <Clock className="h-3 w-3" aria-hidden="true" />}
+                                {processing ? 'Processando envio...' : isPaid ? 'Pago e liberado' : 'Aguardando pagamento'}
+                              </span>
+                            </div>
+                          </header>
+                          <div className="divide-y divide-borderSoft">
+                            {order.items.map((item, index) => {
+                              const delivered = itemIsDelivered(item);
+                              return (
+                                <div key={`${item.productId}-${index}`} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                                  <div className="flex min-w-0 items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-borderSoft bg-surface-warm text-primary"><FileText className="h-4 w-4" aria-hidden="true" /></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-ink">{item.productTitle}</h3>{getItemTypeBadge(item.productType)}</div><p className="mt-1 text-xs text-ink-muted">{item.format}</p></div></div>
+                                  {isPaid && delivered ? <button type="button" onClick={() => selectView('downloads')} className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-borderSoft px-4 text-xs font-semibold text-ink transition-colors hover:bg-surface-warm"><Download className="h-4 w-4" aria-hidden="true" /> Abrir biblioteca</button> : isPaid ? <span className="inline-flex min-h-11 items-center gap-1.5 self-start rounded-xl border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-800"><RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Processando envio...</span> : <span className="inline-flex min-h-11 items-center gap-1.5 self-start rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-800"><Clock className="h-3.5 w-3.5" aria-hidden="true" /> Liberação após pagamento</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ))}
 
                 {activeView === 'downloads' && (filteredDownloads.length === 0 ? (
                   <section className="rounded-2xl border border-borderSoft bg-white p-10 text-center"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-warm text-ink-muted"><Download className="h-6 w-6" aria-hidden="true" /></div><h2 className="font-semibold text-ink">Nenhum item liberado</h2><p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">{filterQuery ? 'Nenhum download corresponde à sua busca.' : 'Seus arquivos aparecerão aqui após a confirmação do pagamento.'}</p></section>
