@@ -34,6 +34,7 @@ export function Dashboard({ onNavigateOrders }: { onNavigateOrders?: () => void 
       orders: dailyOrders.length,
     };
   });
+  const hasRevenueInPeriod = chartData.some(entry => entry.revenue > 0);
 
   return (
     <div className="flex flex-1 flex-col gap-6">
@@ -68,24 +69,40 @@ export function Dashboard({ onNavigateOrders }: { onNavigateOrders?: () => void 
                     <stop offset="0%" stopColor="var(--color-revenue)" stopOpacity={0.28} />
                     <stop offset="100%" stopColor="var(--color-revenue)" stopOpacity={0.02} />
                   </linearGradient>
+                  <linearGradient id="adminOrders" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-orders)" stopOpacity={0.22} />
+                    <stop offset="100%" stopColor="var(--color-orders)" stopOpacity={0.02} />
+                  </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" />
                 <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={10} />
-                <YAxis yAxisId="revenue" tickLine={false} axisLine={false} width={45} tickFormatter={value => `R$${Number(value).toLocaleString('pt-BR', { notation: 'compact' })}`} />
-                <YAxis yAxisId="orders" orientation="right" hide domain={[0, 'auto']} />
+                {hasRevenueInPeriod ? (
+                  <>
+                    <YAxis yAxisId="revenue" tickLine={false} axisLine={false} width={45} tickFormatter={value => `R$${Number(value).toLocaleString('pt-BR', { notation: 'compact' })}`} />
+                    <YAxis yAxisId="orders" orientation="right" hide domain={[0, 'auto']} />
+                  </>
+                ) : (
+                  <YAxis yAxisId="activity" tickLine={false} axisLine={false} width={24} allowDecimals={false} domain={[0, 'auto']} />
+                )}
                 <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => (
                   <div className="flex min-w-36 items-center justify-between gap-4">
                     <span className="text-muted-foreground">{name === 'revenue' ? 'Faturamento' : 'Pedidos'}</span>
                     <span className="font-mono font-medium tabular-nums">{name === 'revenue' ? Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : Number(value)}</span>
                   </div>
                 )} />} />
-                <Area yAxisId="revenue" dataKey="revenue" type="monotone" stroke="var(--color-revenue)" fill="url(#adminRevenue)" strokeWidth={2.5} />
-                <Area yAxisId="orders" dataKey="orders" type="monotone" stroke="var(--color-orders)" fill="none" strokeDasharray="5 5" strokeWidth={2} />
+                {hasRevenueInPeriod ? (
+                  <>
+                    <Area yAxisId="revenue" dataKey="revenue" type="monotone" stroke="var(--color-revenue)" fill="url(#adminRevenue)" strokeWidth={2.5} />
+                    <Area yAxisId="orders" dataKey="orders" type="monotone" stroke="var(--color-orders)" fill="none" strokeDasharray="5 5" strokeWidth={2} />
+                  </>
+                ) : (
+                  <Area yAxisId="activity" dataKey="orders" type="monotone" stroke="var(--color-orders)" fill="url(#adminOrders)" strokeWidth={2.5} />
+                )}
               </AreaChart>
             </ChartContainer>
             <div className="mt-3 flex flex-wrap items-center gap-4 border-t pt-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-primary" /> Faturamento</span>
-              <span className="flex items-center gap-2"><span className="h-0.5 w-4 border-t-2 border-dashed border-emerald-600" /> Pedidos</span>
+              {hasRevenueInPeriod && <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-primary" /> Faturamento</span>}
+              <span className="flex items-center gap-2"><span className={`h-0.5 w-4 border-t-2 border-emerald-600 ${hasRevenueInPeriod ? 'border-dashed' : ''}`} /> Pedidos</span>
             </div>
           </CardContent>
         </Card>
