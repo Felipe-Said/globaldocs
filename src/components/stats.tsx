@@ -1,9 +1,12 @@
 import { AlertCircle, Bot, Boxes, CircleDollarSign, Globe2, RefreshCw, ShoppingBag, UserRound, WalletCards } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { useStore } from '@/context/StoreContext';
 import { supabase } from '@/lib/supabase';
 import { useCallback, useEffect, useState } from 'react';
+
+const metricCardClass = 'h-full min-h-[196px] overflow-hidden rounded-2xl border-black/[0.08] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]';
+const metricIconClass = 'flex size-10 shrink-0 items-center justify-center rounded-xl';
 
 type Stat = {
   label: string;
@@ -108,42 +111,44 @@ function TrafficCard() {
     : 0;
 
   return (
-    <Card className={`rounded-xl border-black/10 bg-white shadow-xs transition-shadow hover:shadow-md xl:col-span-2 ${error ? 'border-rose-200' : ''}`}>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
-        <div className="min-w-0 space-y-1">
-          <CardTitle className="text-sm font-medium">Acessos da loja</CardTitle>
-          <CardDescription className="text-xs">Agora e hoje</CardDescription>
+    <Card className={`${metricCardClass} xl:col-span-2 ${error ? 'border-rose-200' : ''}`}>
+      <div className="flex h-full flex-col p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <CardTitle className="text-sm font-semibold leading-5">Acessos da loja</CardTitle>
+            <CardDescription className="mt-1 text-xs leading-4">Presença em tempo real e total de hoje</CardDescription>
+          </div>
+          <button type="button" onClick={() => void refreshTraffic()} disabled={loading} aria-label="Atualizar acessos da loja" className={`${metricIconClass} cursor-pointer bg-cyan-50 text-cyan-700 transition-colors hover:bg-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60`}>
+            <Globe2 className={`size-5 ${loading ? 'animate-pulse' : ''}`} aria-hidden={true} />
+          </button>
         </div>
-        <button type="button" onClick={() => void refreshTraffic()} disabled={loading} aria-label="Atualizar acessos da loja" className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-cyan-50 text-cyan-700 transition-colors hover:bg-cyan-100 disabled:cursor-wait disabled:opacity-60">
-          <Globe2 className={`size-5 ${loading ? 'animate-pulse' : ''}`} aria-hidden={true} />
-        </button>
-      </CardHeader>
-      <CardContent aria-live="polite">
+        <div className="mt-4 flex-1" aria-live="polite">
         {error ? (
           <div className="flex items-start gap-2 text-xs leading-relaxed text-rose-700"><AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden={true} /><span>{error}</span></div>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+            <div className="grid grid-cols-2 gap-2">
               <TrafficValue icon={UserRound} label="Pessoas online" value={metrics?.onlineHumans} tone="text-emerald-600" loading={loading && !metrics} />
               <TrafficValue icon={Bot} label="Bots ativos" value={metrics?.onlineBots} tone="text-amber-600" loading={loading && !metrics} />
               <TrafficValue icon={UserRound} label="Pessoas hoje" value={metrics?.todayHumans} tone="text-cyan-700" loading={loading && !metrics} />
               <TrafficValue icon={Bot} label="Bots hoje" value={metrics?.todayBots} tone="text-orange-700" loading={loading && !metrics} />
             </div>
-            <p className="mt-2 truncate border-t border-black/5 pt-2 text-[11px] text-muted-foreground" title={topSource ? `${topSource.source}: ${sourceShare}%` : 'Sem origem registrada'}>
+            <p className="mt-3 truncate border-t border-black/[0.06] pt-3 text-[11px] leading-4 text-muted-foreground" title={topSource ? `${topSource.source}: ${sourceShare}%` : 'Sem origem registrada'}>
               Origem hoje: <strong className="font-semibold text-foreground">{topSource ? `${topSource.source} · ${sourceShare}%` : 'Aguardando dados'}</strong>
             </p>
           </>
         )}
-      </CardContent>
+        </div>
+      </div>
     </Card>
   );
 }
 
 function TrafficValue({ icon: Icon, label, value, tone, loading }: { icon: LucideIcon; label: string; value?: number; tone: string; loading: boolean }) {
   return (
-    <div className="min-w-0">
-      <p className="flex items-center gap-1 text-[10px] leading-tight text-muted-foreground"><Icon className={`size-3 shrink-0 ${tone}`} aria-hidden={true} /><span className="truncate" title={label}>{label}</span></p>
-      <p className="mt-0.5 text-lg font-semibold leading-none tabular-nums text-foreground">{loading ? '—' : Number(value || 0).toLocaleString('pt-BR')}</p>
+    <div className="min-w-0 rounded-lg bg-slate-50 px-3 py-2">
+      <p className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground"><Icon className={`size-3.5 shrink-0 ${tone}`} aria-hidden={true} /><span className="truncate" title={label}>{label}</span></p>
+      <p className="mt-1 text-xl font-semibold leading-none tabular-nums text-foreground">{loading ? '—' : Number(value || 0).toLocaleString('pt-BR')}</p>
     </div>
   );
 }
@@ -186,17 +191,18 @@ function IntegrationBalanceCard() {
   }, [refreshBalance]);
 
   return (
-    <Card className={`rounded-xl border-black/10 bg-white shadow-xs transition-shadow hover:shadow-md ${error ? 'border-rose-200' : balance?.total === 0 ? 'border-amber-200' : ''}`}>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
-        <div className="space-y-1">
-          <CardTitle className="text-sm font-medium">Saldo da integração</CardTitle>
-          <CardDescription className="text-xs">Consulta privada em tempo real</CardDescription>
+    <Card className={`${metricCardClass} ${error ? 'border-rose-200' : balance?.total === 0 ? 'border-amber-200' : ''}`}>
+      <div className="flex h-full flex-col p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <CardTitle className="text-sm font-semibold leading-5">Saldo da integração</CardTitle>
+            <CardDescription className="mt-1 text-xs leading-4">Consulta privada em tempo real</CardDescription>
+          </div>
+          <button type="button" onClick={() => void refreshBalance()} disabled={loading} aria-label="Atualizar saldo da integração" className={`${metricIconClass} cursor-pointer bg-amber-50 text-amber-700 transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60`}>
+            <RefreshCw className={`size-5 ${loading ? 'animate-spin' : ''}`} aria-hidden={true} />
+          </button>
         </div>
-        <button type="button" onClick={() => void refreshBalance()} disabled={loading} aria-label="Atualizar saldo da integração" className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-amber-50 text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-wait disabled:opacity-60">
-          <RefreshCw className={`size-5 ${loading ? 'animate-spin' : ''}`} aria-hidden={true} />
-        </button>
-      </CardHeader>
-      <CardContent aria-live="polite">
+        <div className="mt-auto pt-5" aria-live="polite">
         {error ? (
           <div className="flex items-start gap-2 text-xs leading-relaxed text-rose-700"><AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden={true} /><span>{error}</span></div>
         ) : (
@@ -205,7 +211,8 @@ function IntegrationBalanceCard() {
             <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${balance?.total === 0 ? 'text-amber-700' : 'text-muted-foreground'}`}><WalletCards className="size-3.5" aria-hidden={true} />{balance?.fetchedAt ? `Atualizado às ${new Date(balance.fetchedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Atualizando...'}</p>
           </>
         )}
-      </CardContent>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -213,15 +220,17 @@ function IntegrationBalanceCard() {
 function StatCard({ stat }: { stat: Stat }) {
   const Icon = stat.icon;
   return (
-    <Card className="rounded-xl border-black/10 bg-white shadow-xs transition-shadow hover:shadow-md">
-      <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
-        <div className="space-y-1">
-          <CardTitle className="text-sm font-medium">{stat.label}</CardTitle>
-          <CardDescription className="text-xs">{stat.hint}</CardDescription>
+    <Card className={metricCardClass}>
+      <div className="flex h-full flex-col p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <CardTitle className="text-sm font-semibold leading-5">{stat.label}</CardTitle>
+            <CardDescription className="mt-1 text-xs leading-4">{stat.hint}</CardDescription>
+          </div>
+          <span className={`${metricIconClass} ${stat.iconClassName}`}><Icon className="size-5" aria-hidden={true} /></span>
         </div>
-        <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${stat.iconClassName}`}><Icon className="size-5" aria-hidden={true} /></span>
-      </CardHeader>
-      <CardContent><p className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">{stat.value}</p></CardContent>
+        <p className="mt-auto pt-5 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{stat.value}</p>
+      </div>
     </Card>
   );
 }
