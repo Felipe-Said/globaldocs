@@ -83,7 +83,7 @@ export const BioLinksView: React.FC = () => {
               key={link.brand}
               to={link.to}
               aria-label={link.accessibleLabel}
-              className="group flex min-h-16 w-full items-center gap-4 rounded-2xl border border-borderSoft bg-white px-5 text-ink shadow-notion-card transition-[border-color,background-color,box-shadow] hover:border-primary/30 hover:bg-primary-tint hover:shadow-notion-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              className="group flex min-h-16 w-full items-center gap-4 rounded-2xl border border-white/10 bg-ink px-5 text-white shadow-notion-card transition-[background-color,box-shadow] hover:bg-ink/90 hover:shadow-notion-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
             >
               <span className="text-sm font-semibold sm:text-base">{link.label}</span>
               <span className="flex min-w-0 flex-1 items-center" aria-hidden="true">
@@ -93,7 +93,7 @@ export const BioLinksView: React.FC = () => {
                   className="h-7 max-w-[112px] object-contain object-left sm:h-8 sm:max-w-[132px]"
                 />
               </span>
-              <ArrowUpRight className="h-5 w-5 shrink-0 text-ink-muted transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
+              <ArrowUpRight className="h-5 w-5 shrink-0 text-white/65 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-white" aria-hidden="true" />
             </Link>
           ))}
         </nav>
