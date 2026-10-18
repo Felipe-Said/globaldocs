@@ -111,7 +111,7 @@ function TrafficCard() {
     : 0;
 
   return (
-    <Card className={`${metricCardClass} xl:col-span-2 ${error ? 'border-rose-200' : ''}`}>
+    <Card className={`${metricCardClass} sm:col-span-2 ${error ? 'border-rose-200' : ''}`}>
       <div className="flex h-full flex-col p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -127,7 +127,7 @@ function TrafficCard() {
           <div className="flex items-start gap-2 text-xs leading-relaxed text-rose-700"><AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden={true} /><span>{error}</span></div>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <TrafficValue icon={UserRound} label="Pessoas online" value={metrics?.onlineHumans} tone="text-emerald-600" loading={loading && !metrics} />
               <TrafficValue icon={Bot} label="Bots ativos" value={metrics?.onlineBots} tone="text-amber-600" loading={loading && !metrics} />
               <TrafficValue icon={UserRound} label="Pessoas hoje" value={metrics?.todayHumans} tone="text-cyan-700" loading={loading && !metrics} />
