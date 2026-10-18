@@ -1,4 +1,4 @@
-import { json, readBody, supabaseAdmin } from '../../server/nowpayments.mjs';
+import { enforceRateLimit, json, readBody, requestIdentity, supabaseAdmin } from '../../server/nowpayments.mjs';
 
 const findUserByEmail = async email => {
   for (let page = 1; page <= 10; page += 1) {
@@ -17,6 +17,11 @@ export default async function handler(request, response) {
     const body = readBody(request);
     const email = String(body.email || '').trim().toLowerCase();
     const token = String(body.token || '').trim();
+    const identity = `${requestIdentity(request)}:${email.slice(0, 160)}`;
+    if (!await enforceRateLimit('legacy-account-activation', identity, 5, 900)) {
+      response.setHeader('Retry-After', '900');
+      return json(response, 429, { error: 'Muitas tentativas. Aguarde alguns minutos.' });
+    }
     if (!/^\S+@\S+\.\S+$/.test(email) || !/^tk_[a-f0-9]{48}$/i.test(token)) {
       return json(response, 401, { error: 'E-mail ou senha/token inválidos.' });
     }
@@ -60,6 +65,7 @@ export default async function handler(request, response) {
 
     return json(response, 200, { success: true });
   } catch (error) {
-    return json(response, 500, { error: error.message || 'Não foi possível ativar a conta.' });
+    console.error('[customer:legacy-activation]', { status: error.status || 500, message: error.message || 'unknown error' });
+    return json(response, error.status === 413 || error.status === 415 ? error.status : 500, { error: 'Não foi possível ativar a conta.' });
   }
 }

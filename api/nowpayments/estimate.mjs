@@ -22,9 +22,10 @@ export default async function handler(request, response) {
     const quote = await getNowPaymentsQuote(settings, request.query?.amount);
     return json(response, 200, { enabled: true, ...quote });
   } catch (error) {
+    console.error('[crypto:estimate]', { status: error.status || 502, message: error.message || 'unknown error' });
     return json(response, error.status || 502, {
       enabled: true,
-      error: error.message || 'Não foi possível consultar a cotação em USDT.',
+      error: 'Não foi possível consultar a cotação em USDT.',
     });
   }
 }

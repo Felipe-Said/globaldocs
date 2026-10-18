@@ -224,6 +224,10 @@ export default async function handler(request, response) {
     if (error) throw error;
     return json(response, 200, { success: true, ...publicSettings(data), message: 'Configuração da NPPR Team salva.' });
   } catch (error) {
-    return json(response, error.status || 500, { error: error.message || 'Falha na integração com a NPPR Team.' });
+    console.error('[supplier:api]', { status: error.status || 500, message: error.message || 'unknown error' });
+    const admin = await requireAdmin(request).catch(() => null);
+    return json(response, error.status || 500, {
+      error: admin ? (error.message || 'Falha na integração do fornecedor.') : 'Não foi possível processar a solicitação.',
+    });
   }
 }
