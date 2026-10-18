@@ -623,7 +623,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const cancelWalletTopUp = async (topUpId: string): Promise<Result> => {
     const token = await customerAccessToken();
     if (!token) return { success: false, message: 'Sua sessão expirou. Entre novamente.' };
-    const response = await fetch('/api/wallet/cancel-topup', {
+    const response = await fetch('/api/wallet/topup-status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ topUpId }),
