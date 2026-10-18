@@ -101,10 +101,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             )}
           </div>
 
-          <div className="flex items-center gap-1 text-[11px] text-ink font-medium shrink-0">
-            <Star className="w-3 h-3 fill-accent-amber text-accent-amber shrink-0" />
-            <span>{product.rating.toFixed(1)}</span>
-          </div>
+          {product.rating > 0 ? (
+            <div className="flex items-center gap-1 text-[11px] text-ink font-medium shrink-0">
+              <Star className="w-3 h-3 fill-accent-amber text-accent-amber shrink-0" />
+              <span>{product.rating.toFixed(1)}</span>
+            </div>
+          ) : (
+            <span className="text-[10px] text-ink-faint">Novo</span>
+          )}
         </div>
 
         {/* Collection & Format */}

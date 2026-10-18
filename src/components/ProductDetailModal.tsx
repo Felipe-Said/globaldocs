@@ -15,9 +15,10 @@ import {
   Briefcase,
   Zap,
   Clock,
-  Rocket
-  ,Minus,
-  Plus
+  Rocket,
+  Minus,
+  Plus,
+  Download
 } from 'lucide-react';
 import { buildProductSEO, updateDocumentSEO } from '../utils/seo';
 import { detectCountries } from '../utils/countryDetection';
@@ -247,8 +248,15 @@ export const ProductDetailModal: React.FC = () => {
             <div>
               <div className="text-[10px] sm:text-xs text-ink-muted">Avaliação</div>
               <div className="text-xs sm:text-sm font-bold text-ink mt-0.5 flex items-center justify-center gap-1">
-                <Star className="w-3 h-3 fill-accent-amber text-accent-amber" />
-                {selectedProduct.rating.toFixed(1)} ({selectedProduct.reviewsCount})
+                {selectedProduct.rating > 0 ? (
+                  <>
+                    <Star className="w-3 h-3 fill-accent-amber text-accent-amber shrink-0" />
+                    <span>{selectedProduct.rating.toFixed(1)}</span>
+                    <span className="text-ink-muted text-[11px] font-normal">({selectedProduct.reviewsCount})</span>
+                  </>
+                ) : (
+                  <span className="text-ink-muted text-xs font-normal">Novo</span>
+                )}
               </div>
             </div>
             <div>
@@ -313,6 +321,12 @@ export const ProductDetailModal: React.FC = () => {
               )}
             </div>
             <UsdtEstimate amount={selectedProduct.price * quantity} compact />
+            {selectedProduct.downloadsCount > 0 && (
+              <div className="text-[11px] text-ink-muted flex items-center gap-1.5 mt-1 font-medium">
+                <Download className="w-3 h-3 text-ink-muted shrink-0" />
+                <span>{selectedProduct.downloadsCount.toLocaleString('pt-BR')} solicitações confirmadas</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-end gap-2 w-full sm:w-auto">

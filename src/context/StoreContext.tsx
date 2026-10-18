@@ -6,6 +6,7 @@ import {
 } from '../types';
 import { isValidTaxId, normalizeCustomerName, normalizeTaxId } from '../lib/customer-profile';
 import { deriveDeliveryFeatures, deriveProductSubcategory, localizeCatalogText } from '../utils/catalogLocalization';
+import { applySocialProof } from '../utils/productSocialProof';
 
 export interface CustomerUser { id: string; email: string; name?: string; document?: string }
 export interface WalletTransaction {
@@ -265,7 +266,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const mapped = rows.map((row: any) => productFromRow(row, deliverables?.get(row.id)));
     if (mapped.length > 0) {
       hasLoadedProducts.current = true;
-      setProducts(mapped);
+      setProducts(applySocialProof(mapped));
       return;
     }
     if (!hasLoadedProducts.current) setProducts([]);
@@ -761,7 +762,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const { data, error } = await supabase.from('products').insert({ data: publicData, active: product.active, featured: Boolean(product.isFeatured) }).select('*').single();
     if (error || !data) return showToast(error?.message || 'Erro ao cadastrar produto.', 'error');
     if (Object.keys(deliverable).length) await supabase.from('product_deliverables').upsert({ product_id: data.id, data: deliverable });
-    setProducts(value => [productFromRow(data, deliverable), ...value]);
+    setProducts(value => applySocialProof([productFromRow(data, deliverable), ...value]));
     showToast(`"${product.title}" cadastrado com sucesso!`);
   };
   const updateProduct = async (id: string, updates: Partial<DigitalProduct>) => {
@@ -772,12 +773,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       supabase.from('product_deliverables').upsert({ product_id: id, data: deliverable }),
     ]);
     if (error || deliverableError) return showToast(error?.message || deliverableError?.message || 'Erro ao atualizar item.', 'error');
-    setProducts(value => value.map(item => item.id === id ? merged : item));
+    setProducts(value => applySocialProof(value.map(item => item.id === id ? merged : item)));
     showToast('Item atualizado.');
   };
   const deleteProduct = async (id: string) => {
     const { error } = await supabase.from('products').delete().eq('id', id);
-    if (error) return showToast(error.message, 'error'); setProducts(value => value.filter(item => item.id !== id)); showToast('Item removido.', 'info');
+    if (error) return showToast(error.message, 'error'); setProducts(value => applySocialProof(value.filter(item => item.id !== id))); showToast('Item removido.', 'info');
   };
   const toggleProductStatus = async (id: string) => { const item = products.find(value => value.id === id); if (item) await updateProduct(id, { active: !item.active }); };
 
