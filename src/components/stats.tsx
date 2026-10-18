@@ -61,6 +61,11 @@ type TrafficMetrics = {
   botAccesses: number;
   uniqueHumans: number;
   todayAccesses: number;
+  onlineHumans: number;
+  onlineBots: number;
+  todayHumans: number;
+  todayBots: number;
+  liveWindowSeconds?: number;
   topSources: Array<{ source: string; accesses: number }>;
   updatedAt?: string;
 };
@@ -93,13 +98,13 @@ function TrafficCard() {
 
   useEffect(() => {
     void refreshTraffic();
-    const interval = window.setInterval(() => void refreshTraffic(), 60_000);
+    const interval = window.setInterval(() => void refreshTraffic(), 15_000);
     return () => window.clearInterval(interval);
   }, [refreshTraffic]);
 
   const topSource = metrics?.topSources?.[0];
-  const sourceShare = topSource && metrics?.totalAccesses
-    ? Math.round((topSource.accesses / metrics.totalAccesses) * 100)
+  const sourceShare = topSource && metrics?.todayAccesses
+    ? Math.round((topSource.accesses / metrics.todayAccesses) * 100)
     : 0;
 
   return (
@@ -107,7 +112,7 @@ function TrafficCard() {
       <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
         <div className="min-w-0 space-y-1">
           <CardTitle className="text-sm font-medium">Acessos da loja</CardTitle>
-          <CardDescription className="text-xs">Últimos 30 dias</CardDescription>
+          <CardDescription className="text-xs">Agora e hoje</CardDescription>
         </div>
         <button type="button" onClick={() => void refreshTraffic()} disabled={loading} aria-label="Atualizar acessos da loja" className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-cyan-50 text-cyan-700 transition-colors hover:bg-cyan-100 disabled:cursor-wait disabled:opacity-60">
           <Globe2 className={`size-5 ${loading ? 'animate-pulse' : ''}`} aria-hidden={true} />
@@ -118,18 +123,28 @@ function TrafficCard() {
           <div className="flex items-start gap-2 text-xs leading-relaxed text-rose-700"><AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden={true} /><span>{error}</span></div>
         ) : (
           <>
-            <p className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">{loading && !metrics ? '—' : Number(metrics?.totalAccesses || 0).toLocaleString('pt-BR')}</p>
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1"><UserRound className="size-3.5 text-emerald-600" aria-hidden={true} />{Number(metrics?.humanAccesses || 0).toLocaleString('pt-BR')} pessoas</span>
-              <span className="inline-flex items-center gap-1"><Bot className="size-3.5 text-amber-600" aria-hidden={true} />{Number(metrics?.botAccesses || 0).toLocaleString('pt-BR')} bots</span>
-            </p>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+              <TrafficValue icon={UserRound} label="Pessoas online" value={metrics?.onlineHumans} tone="text-emerald-600" loading={loading && !metrics} />
+              <TrafficValue icon={Bot} label="Bots ativos" value={metrics?.onlineBots} tone="text-amber-600" loading={loading && !metrics} />
+              <TrafficValue icon={UserRound} label="Pessoas hoje" value={metrics?.todayHumans} tone="text-cyan-700" loading={loading && !metrics} />
+              <TrafficValue icon={Bot} label="Bots hoje" value={metrics?.todayBots} tone="text-orange-700" loading={loading && !metrics} />
+            </div>
             <p className="mt-2 truncate border-t border-black/5 pt-2 text-[11px] text-muted-foreground" title={topSource ? `${topSource.source}: ${sourceShare}%` : 'Sem origem registrada'}>
-              Origem: <strong className="font-semibold text-foreground">{topSource ? `${topSource.source} · ${sourceShare}%` : 'Aguardando dados'}</strong>
+              Origem hoje: <strong className="font-semibold text-foreground">{topSource ? `${topSource.source} · ${sourceShare}%` : 'Aguardando dados'}</strong>
             </p>
           </>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function TrafficValue({ icon: Icon, label, value, tone, loading }: { icon: LucideIcon; label: string; value?: number; tone: string; loading: boolean }) {
+  return (
+    <div className="min-w-0">
+      <p className="flex items-center gap-1 text-[10px] leading-tight text-muted-foreground"><Icon className={`size-3 shrink-0 ${tone}`} aria-hidden={true} /><span className="truncate" title={label}>{label}</span></p>
+      <p className="mt-0.5 text-lg font-semibold leading-none tabular-nums text-foreground">{loading ? '—' : Number(value || 0).toLocaleString('pt-BR')}</p>
+    </div>
   );
 }
 

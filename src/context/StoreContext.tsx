@@ -183,18 +183,30 @@ const readAllProducts = async () => {
   return { data: rows, error: null };
 };
 
+const isStorefrontPath = () => typeof window !== 'undefined' && /^\/(?:$|colecao(?:\/|$)|collection(?:\/|$))/.test(window.location.pathname);
+
+const getStoreVisitSession = () => {
+  if (!isStorefrontPath()) return null;
+  try {
+    const stored = JSON.parse(window.localStorage.getItem('store-visit-session') || window.sessionStorage.getItem('store-visit-session') || 'null');
+    const now = Date.now();
+    const session = stored?.id && now - Number(stored.lastActivityAt || stored.startedAt || 0) < 30 * 60 * 1000
+      ? stored
+      : { id: crypto.randomUUID(), startedAt: now, lastActivityAt: now };
+    session.lastActivityAt = now;
+    window.localStorage.setItem('store-visit-session', JSON.stringify(session));
+    window.sessionStorage.removeItem('store-visit-session');
+    return session as { id: string; startedAt: number; lastActivityAt: number };
+  } catch {
+    return null;
+  }
+};
+
 const storefrontCatalogUrl = () => {
   const query = new URLSearchParams({ action: 'catalog' });
-  if (typeof window === 'undefined' || !/^\/(?:$|colecao(?:\/|$)|collection(?:\/|$))/.test(window.location.pathname)) {
-    return `/api/nppr?${query.toString()}`;
-  }
+  const session = getStoreVisitSession();
+  if (!session) return `/api/nppr?${query.toString()}`;
   try {
-    const stored = JSON.parse(window.sessionStorage.getItem('store-visit-session') || 'null');
-    const now = Date.now();
-    const session = stored?.id && now - Number(stored.startedAt || 0) < 30 * 60 * 1000
-      ? stored
-      : { id: crypto.randomUUID(), startedAt: now };
-    window.sessionStorage.setItem('store-visit-session', JSON.stringify(session));
     const pageQuery = new URLSearchParams(window.location.search);
     query.set('track', '1');
     query.set('sessionId', session.id);
@@ -470,6 +482,36 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     });
     return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const session = getStoreVisitSession();
+    if (!session) return;
+    const heartbeat = () => {
+      if (document.visibilityState !== 'visible' || !isStorefrontPath()) return;
+      session.lastActivityAt = Date.now();
+      try { window.localStorage.setItem('store-visit-session', JSON.stringify(session)); } catch { /* presença continua sem persistência local */ }
+      void fetch(`/api/nppr?action=traffic-heartbeat&sessionId=${encodeURIComponent(session.id)}`, {
+        cache: 'no-store',
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+    const leave = () => {
+      const payload = JSON.stringify({ action: 'traffic-leave', sessionId: session.id });
+      if (navigator.sendBeacon) navigator.sendBeacon('/api/nppr', new Blob([payload], { type: 'application/json' }));
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') heartbeat();
+    };
+    heartbeat();
+    const interval = window.setInterval(heartbeat, 30_000);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', leave);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', leave);
+    };
   }, []);
 
   const adminLogin = async (email: string, password: string): Promise<Result> => {

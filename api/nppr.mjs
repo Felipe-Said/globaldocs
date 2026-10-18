@@ -88,8 +88,20 @@ const trackStoreVisit = async request => {
     region: clean(request.headers['x-vercel-ip-country-region'], 32) || null,
     city: city || null,
     device_type: deviceType,
+    last_seen_at: new Date().toISOString(),
+    ended_at: null,
   }, { onConflict: 'session_id', ignoreDuplicates: true });
   if (error) console.error('[traffic:track]', error.message);
+};
+
+const updateStorePresence = async (sessionIdValue, ended = false) => {
+  const sessionId = clean(sessionIdValue, 80);
+  if (!sessionId || sessionId.length < 16) return;
+  const now = new Date().toISOString();
+  const { error } = await supabaseAdmin.from('store_visits')
+    .update({ last_seen_at: now, ended_at: ended ? now : null })
+    .eq('session_id', sessionId);
+  if (error) console.error('[traffic:presence]', error.message);
 };
 
 export default async function handler(request, response) {
@@ -117,6 +129,14 @@ export default async function handler(request, response) {
       const { data, error } = await supabaseAdmin.rpc('get_store_traffic_metrics', { p_days: 30 });
       if (error) throw error;
       return json(response, 200, data || {});
+    }
+    if (request.method === 'GET' && request.query.action === 'traffic-heartbeat') {
+      await updateStorePresence(request.query.sessionId);
+      return json(response, 200, { success: true });
+    }
+    if (request.method === 'POST' && body.action === 'traffic-leave') {
+      await updateStorePresence(body.sessionId, true);
+      return json(response, 200, { success: true });
     }
     if (request.method === 'POST' && body.action === 'fulfill') {
       const admin = await requireAdmin(request);
