@@ -11,6 +11,7 @@ import { MyDownloadsView } from './components/MyDownloadsView';
 import { Footer } from './components/Footer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { PoliciesView } from './components/PoliciesView';
+import { BioLinksView } from './components/BioLinksView';
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
 const AdminLayout = lazy(() => import('./components/Admin/AdminLayout').then(module => ({ default: module.AdminLayout })));
@@ -78,6 +79,8 @@ export default function App() {
       <StoreProvider>
         <URLParamHandler />
         <Routes>
+          <Route path="/cliqueaqui" element={<BioLinksView />} />
+
           {/* Public Storefront Route */}
           <Route path="/" element={
             <PublicLayout>
