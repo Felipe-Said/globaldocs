@@ -4,17 +4,34 @@ import { StoreProvider, useStore } from './context/StoreContext';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { ProductGrid } from './components/ProductGrid';
-import { CollectionView } from './components/CollectionView';
-import { ProductDetailModal } from './components/ProductDetailModal';
-import { CartDrawer } from './components/CartDrawer';
-import { MyDownloadsView } from './components/MyDownloadsView';
 import { Footer } from './components/Footer';
 import { MobileBottomNav } from './components/MobileBottomNav';
-import { PoliciesView } from './components/PoliciesView';
-import { BioLinksView } from './components/BioLinksView';
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
 const AdminLayout = lazy(() => import('./components/Admin/AdminLayout').then(module => ({ default: module.AdminLayout })));
+const CollectionView = lazy(() => import('./components/CollectionView').then(module => ({ default: module.CollectionView })));
+const MyDownloadsView = lazy(() => import('./components/MyDownloadsView').then(module => ({ default: module.MyDownloadsView })));
+const PoliciesView = lazy(() => import('./components/PoliciesView').then(module => ({ default: module.PoliciesView })));
+const BioLinksView = lazy(() => import('./components/BioLinksView').then(module => ({ default: module.BioLinksView })));
+const ProductDetailModal = lazy(() => import('./components/ProductDetailModal').then(module => ({ default: module.ProductDetailModal })));
+const CartDrawer = lazy(() => import('./components/CartDrawer').then(module => ({ default: module.CartDrawer })));
+
+const PageFallback = () => (
+  <div className="mx-auto min-h-[45vh] w-full max-w-7xl animate-pulse px-4 py-10 sm:px-6 lg:px-8" role="status" aria-label="Carregando página">
+    <div className="h-8 w-56 rounded-md bg-black/10" />
+    <div className="mt-6 h-64 rounded-xl bg-black/5" />
+  </div>
+);
+
+const StoreOverlays: React.FC = () => {
+  const { selectedProduct, isCartOpen, isCheckoutOpen } = useStore();
+  return (
+    <>
+      {selectedProduct && <Suspense fallback={null}><ProductDetailModal /></Suspense>}
+      {(isCartOpen || isCheckoutOpen) && <Suspense fallback={null}><CartDrawer /></Suspense>}
+    </>
+  );
+};
 
 const ToastNotification: React.FC = () => {
   const { toast } = useStore();
@@ -79,7 +96,7 @@ export default function App() {
       <StoreProvider>
         <URLParamHandler />
         <Routes>
-          <Route path="/cliqueaqui" element={<BioLinksView />} />
+          <Route path="/cliqueaqui" element={<Suspense fallback={<PageFallback />}><BioLinksView /></Suspense>} />
 
           {/* Public Storefront Route */}
           <Route path="/" element={
@@ -92,30 +109,30 @@ export default function App() {
           {/* Dedicated Collection Routes */}
           <Route path="/colecao/:slug" element={
             <PublicLayout>
-              <CollectionView />
+              <Suspense fallback={<PageFallback />}><CollectionView /></Suspense>
             </PublicLayout>
           } />
           <Route path="/collection/:slug" element={
             <PublicLayout>
-              <CollectionView />
+              <Suspense fallback={<PageFallback />}><CollectionView /></Suspense>
             </PublicLayout>
           } />
 
           {/* Customer Account Routes */}
           <Route path="/conta" element={
             <PublicLayout>
-              <MyDownloadsView />
+              <Suspense fallback={<PageFallback />}><MyDownloadsView /></Suspense>
             </PublicLayout>
           } />
           <Route path="/downloads" element={
             <PublicLayout>
-              <MyDownloadsView />
+              <Suspense fallback={<PageFallback />}><MyDownloadsView /></Suspense>
             </PublicLayout>
           } />
 
           <Route path="/politicas" element={
             <PublicLayout>
-              <PoliciesView />
+              <Suspense fallback={<PageFallback />}><PoliciesView /></Suspense>
             </PublicLayout>
           } />
 
@@ -128,8 +145,7 @@ export default function App() {
         </Routes>
 
         {/* Global Modals & Drawers */}
-        <ProductDetailModal />
-        <CartDrawer />
+        <StoreOverlays />
         <ToastNotification />
       </StoreProvider>
     </BrowserRouter>

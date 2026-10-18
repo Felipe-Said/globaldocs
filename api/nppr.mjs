@@ -14,6 +14,13 @@ const publicSettings = settings => ({
   lastSyncAt: settings.last_sync_at,
 });
 
+const catalogJson = (response, body) => {
+  response.status(200);
+  response.setHeader('Content-Type', 'application/json; charset=utf-8');
+  response.setHeader('Cache-Control', 'public, max-age=15, s-maxage=60, stale-while-revalidate=300');
+  response.end(JSON.stringify(body));
+};
+
 const readAllActiveProducts = async () => {
   const rows = [];
   const pageSize = 1000;
@@ -241,7 +248,6 @@ export default async function handler(request, response) {
   try {
     const body = readBody(request);
     if (request.method === 'GET' && request.query.action === 'catalog') {
-      if (request.query.track === '1') await trackStoreVisit(request);
       const [productRows, collections, banners, settings] = await Promise.all([
         readAllActiveProducts(),
         supabaseAdmin.from('collections').select('*').eq('active', true).order('created_at'),
@@ -250,12 +256,16 @@ export default async function handler(request, response) {
       ]);
       const catalogError = collections.error || banners.error || settings.error;
       if (catalogError) throw catalogError;
-      return json(response, 200, {
+      return catalogJson(response, {
         products: productRows,
         collections: collections.data || [],
         banners: banners.data || [],
         settings: settings.data?.data || {},
       });
+    }
+    if (request.method === 'GET' && request.query.action === 'traffic-track') {
+      await trackStoreVisit(request);
+      return json(response, 200, { success: true });
     }
     if (request.method === 'GET' && request.query.action === 'traffic-metrics') {
       if (!await requireAdmin(request)) return json(response, 401, { error: 'Sessão administrativa inválida.' });

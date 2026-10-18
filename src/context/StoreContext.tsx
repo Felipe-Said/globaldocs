@@ -211,13 +211,14 @@ const getStoreVisitSession = () => {
   }
 };
 
-const storefrontCatalogUrl = () => {
-  const query = new URLSearchParams({ action: 'catalog' });
+const storefrontCatalogUrl = () => '/api/nppr?action=catalog';
+
+const storefrontTrackingUrl = () => {
+  const query = new URLSearchParams({ action: 'traffic-track' });
   const session = getStoreVisitSession();
-  if (!session) return `/api/nppr?${query.toString()}`;
+  if (!session) return null;
   try {
     const pageQuery = new URLSearchParams(window.location.search);
-    query.set('track', '1');
     query.set('sessionId', session.id);
     query.set('landingPath', `${window.location.pathname}${window.location.search}`.slice(0, 300));
     if (document.referrer) query.set('referrer', document.referrer);
@@ -257,6 +258,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'popular' | 'newest'>('featured');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
   const hasLoadedProducts = useRef(false);
+  const hasTrackedVisit = useRef(false);
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ message, type }); window.setTimeout(() => setToast(null), 3500);
@@ -273,8 +275,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const loadStoreData = async () => {
+    if (!hasTrackedVisit.current) {
+      hasTrackedVisit.current = true;
+      const trackingUrl = storefrontTrackingUrl();
+      if (trackingUrl) void fetch(trackingUrl, { cache: 'no-store', keepalive: true }).catch(() => undefined);
+    }
     try {
-      const response = await fetch(storefrontCatalogUrl(), { cache: 'no-store' });
+      const response = await fetch(storefrontCatalogUrl());
       if (response.ok) {
         const catalog = await response.json();
         applyProductRows(catalog.products || []);

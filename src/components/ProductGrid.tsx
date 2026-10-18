@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../context/StoreContext';
 import { ProductCard } from './ProductCard';
 import { Link } from 'react-router-dom';
@@ -17,6 +17,8 @@ const homeProductRailClasses = [
   'lg:grid-cols-3 xl:grid-cols-5',
 ].join(' ');
 
+const COLLECTION_BATCH_SIZE = 4;
+
 export const ProductGrid: React.FC = () => {
   const { 
     products, 
@@ -28,11 +30,26 @@ export const ProductGrid: React.FC = () => {
     setSearchQuery,
     setSelectedFormat
   } = useStore();
+  const [visibleCollectionCount, setVisibleCollectionCount] = useState(COLLECTION_BATCH_SIZE);
+  const loadMoreCollectionsRef = useRef<HTMLDivElement>(null);
 
-  const activeProducts = products.filter(p => p.active);
-  const activeCollections = collections
+  const activeProducts = useMemo(() => products.filter(p => p.active), [products]);
+  const activeCollections = useMemo(() => collections
     .filter(c => c.active)
-    .sort((a, b) => Number(a.homeOrder ?? 9999) - Number(b.homeOrder ?? 9999));
+    .sort((a, b) => Number(a.homeOrder ?? 9999) - Number(b.homeOrder ?? 9999)), [collections]);
+
+  useEffect(() => {
+    if (searchQuery.trim() || selectedCollectionId !== 'all' || visibleCollectionCount >= activeCollections.length) return;
+    const target = loadMoreCollectionsRef.current;
+    if (!target || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        setVisibleCollectionCount(count => Math.min(activeCollections.length, count + COLLECTION_BATCH_SIZE));
+      }
+    }, { rootMargin: '600px 0px' });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [activeCollections.length, searchQuery, selectedCollectionId, visibleCollectionCount]);
 
   // =========================================================================
   // CASO 1: BUSCA GLOBAL ATIVA
@@ -153,6 +170,9 @@ export const ProductGrid: React.FC = () => {
     : [];
 
   const uncategorizedDisplayed = uncategorizedProducts.slice(0, 5);
+  const displayedCollectionGroups = selectedCollectionId === 'all'
+    ? collectionGroups.slice(0, visibleCollectionCount)
+    : collectionGroups;
 
   const hasAnyProducts = collectionGroups.length > 0 || uncategorizedDisplayed.length > 0;
 
@@ -181,8 +201,8 @@ export const ProductGrid: React.FC = () => {
       )}
 
       {/* Renderiza cada Coleção na Home */}
-      {collectionGroups.map(({ collection, totalCount, products: items, hasMore }) => (
-        <div key={collection.id} className="animate-fadeIn">
+      {displayedCollectionGroups.map(({ collection, totalCount, products: items, hasMore }) => (
+        <div key={collection.id} className="animate-fadeIn [content-visibility:auto] [contain-intrinsic-size:700px]">
           
           {/* Header da Coleção */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between pb-3.5 mb-5 border-b border-borderSoft gap-3">
@@ -248,6 +268,18 @@ export const ProductGrid: React.FC = () => {
 
         </div>
       ))}
+
+      {selectedCollectionId === 'all' && visibleCollectionCount < collectionGroups.length && (
+        <div ref={loadMoreCollectionsRef} className="flex min-h-20 items-center justify-center" aria-live="polite">
+          <button
+            type="button"
+            onClick={() => setVisibleCollectionCount(count => Math.min(collectionGroups.length, count + COLLECTION_BATCH_SIZE))}
+            className="min-h-11 rounded-sm border border-borderSoft bg-surface-warm px-5 text-xs font-semibold text-ink transition-colors hover:bg-black/[0.05]"
+          >
+            Carregar mais coleções
+          </button>
+        </div>
+      )}
 
       {/* Se houver produtos avulsos não vinculados a coleções */}
       {uncategorizedDisplayed.length > 0 && (
