@@ -1,4 +1,4 @@
-import { AlertCircle, Boxes, CircleDollarSign, RefreshCw, ShoppingBag, WalletCards } from 'lucide-react';
+import { AlertCircle, Bot, Boxes, CircleDollarSign, Globe2, RefreshCw, ShoppingBag, UserRound, WalletCards } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useStore } from '@/context/StoreContext';
@@ -46,9 +46,90 @@ export function DashboardStats() {
 
   return (
     <>
-      {dynamicStats.map(stat => <StatCard key={stat.label} stat={stat} />)}
+      <StatCard stat={dynamicStats[0]} />
+      <StatCard stat={dynamicStats[1]} />
+      <TrafficCard />
+      <StatCard stat={dynamicStats[2]} />
       <IntegrationBalanceCard />
     </>
+  );
+}
+
+type TrafficMetrics = {
+  totalAccesses: number;
+  humanAccesses: number;
+  botAccesses: number;
+  uniqueHumans: number;
+  todayAccesses: number;
+  topSources: Array<{ source: string; accesses: number }>;
+  updatedAt?: string;
+};
+
+function TrafficCard() {
+  const [metrics, setMetrics] = useState<TrafficMetrics | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const refreshTraffic = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error('Sessão administrativa expirada.');
+      const response = await fetch('/api/nppr?action=traffic-metrics', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Acessos indisponíveis.');
+      setMetrics(result);
+      setError('');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Acessos indisponíveis.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshTraffic();
+    const interval = window.setInterval(() => void refreshTraffic(), 60_000);
+    return () => window.clearInterval(interval);
+  }, [refreshTraffic]);
+
+  const topSource = metrics?.topSources?.[0];
+  const sourceShare = topSource && metrics?.totalAccesses
+    ? Math.round((topSource.accesses / metrics.totalAccesses) * 100)
+    : 0;
+
+  return (
+    <Card className={`rounded-xl border-black/10 bg-white shadow-xs transition-shadow hover:shadow-md ${error ? 'border-rose-200' : ''}`}>
+      <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+        <div className="min-w-0 space-y-1">
+          <CardTitle className="text-sm font-medium">Acessos da loja</CardTitle>
+          <CardDescription className="text-xs">Últimos 30 dias</CardDescription>
+        </div>
+        <button type="button" onClick={() => void refreshTraffic()} disabled={loading} aria-label="Atualizar acessos da loja" className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-cyan-50 text-cyan-700 transition-colors hover:bg-cyan-100 disabled:cursor-wait disabled:opacity-60">
+          <Globe2 className={`size-5 ${loading ? 'animate-pulse' : ''}`} aria-hidden={true} />
+        </button>
+      </CardHeader>
+      <CardContent aria-live="polite">
+        {error ? (
+          <div className="flex items-start gap-2 text-xs leading-relaxed text-rose-700"><AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden={true} /><span>{error}</span></div>
+        ) : (
+          <>
+            <p className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">{loading && !metrics ? '—' : Number(metrics?.totalAccesses || 0).toLocaleString('pt-BR')}</p>
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><UserRound className="size-3.5 text-emerald-600" aria-hidden={true} />{Number(metrics?.humanAccesses || 0).toLocaleString('pt-BR')} pessoas</span>
+              <span className="inline-flex items-center gap-1"><Bot className="size-3.5 text-amber-600" aria-hidden={true} />{Number(metrics?.botAccesses || 0).toLocaleString('pt-BR')} bots</span>
+            </p>
+            <p className="mt-2 truncate border-t border-black/5 pt-2 text-[11px] text-muted-foreground" title={topSource ? `${topSource.source}: ${sourceShare}%` : 'Sem origem registrada'}>
+              Origem: <strong className="font-semibold text-foreground">{topSource ? `${topSource.source} · ${sourceShare}%` : 'Aguardando dados'}</strong>
+            </p>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

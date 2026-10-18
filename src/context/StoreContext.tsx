@@ -183,6 +183,34 @@ const readAllProducts = async () => {
   return { data: rows, error: null };
 };
 
+const storefrontCatalogUrl = () => {
+  const query = new URLSearchParams({ action: 'catalog' });
+  if (typeof window === 'undefined' || !/^\/(?:$|colecao(?:\/|$)|collection(?:\/|$))/.test(window.location.pathname)) {
+    return `/api/nppr?${query.toString()}`;
+  }
+  try {
+    const stored = JSON.parse(window.sessionStorage.getItem('store-visit-session') || 'null');
+    const now = Date.now();
+    const session = stored?.id && now - Number(stored.startedAt || 0) < 30 * 60 * 1000
+      ? stored
+      : { id: crypto.randomUUID(), startedAt: now };
+    window.sessionStorage.setItem('store-visit-session', JSON.stringify(session));
+    const pageQuery = new URLSearchParams(window.location.search);
+    query.set('track', '1');
+    query.set('sessionId', session.id);
+    query.set('landingPath', `${window.location.pathname}${window.location.search}`.slice(0, 300));
+    if (document.referrer) query.set('referrer', document.referrer);
+    if (navigator.webdriver) query.set('webdriver', '1');
+    for (const [parameter, target] of [['utm_source', 'utmSource'], ['utm_medium', 'utmMedium'], ['utm_campaign', 'utmCampaign']] as const) {
+      const value = pageQuery.get(parameter);
+      if (value) query.set(target, value);
+    }
+  } catch {
+    // A loja continua carregando caso o navegador bloqueie o armazenamento da sessão.
+  }
+  return `/api/nppr?${query.toString()}`;
+};
+
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<DigitalProduct[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -225,7 +253,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const loadStoreData = async () => {
     try {
-      const response = await fetch('/api/nppr?action=catalog', { cache: 'no-store' });
+      const response = await fetch(storefrontCatalogUrl(), { cache: 'no-store' });
       if (response.ok) {
         const catalog = await response.json();
         applyProductRows(catalog.products || []);

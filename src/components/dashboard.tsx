@@ -51,7 +51,7 @@ export function Dashboard({ onNavigateOrders }: { onNavigateOrders?: () => void 
         </Button>
       </div>
 
-      <section aria-label="Indicadores principais" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="Indicadores principais" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <DashboardStats />
       </section>
 
