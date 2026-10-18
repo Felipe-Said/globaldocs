@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { FileFormat } from '../types';
@@ -16,6 +16,9 @@ const FORMATS: (FileFormat | 'all')[] = [
 ];
 
 export const Hero: React.FC = () => {
+  const collectionShelfRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef({ pointerId: -1, startX: 0, scrollLeft: 0, active: false, moved: false });
+  const [isDraggingCollections, setIsDraggingCollections] = useState(false);
   const { 
     selectedCollectionId,
     setSelectedCollectionId,
@@ -25,6 +28,48 @@ export const Hero: React.FC = () => {
     setSortBy,
     collections
   } = useStore();
+
+  const finishCollectionDrag = (pointerId?: number) => {
+    const shelf = collectionShelfRef.current;
+    if (shelf && pointerId !== undefined && shelf.hasPointerCapture(pointerId)) {
+      shelf.releasePointerCapture(pointerId);
+    }
+    dragRef.current.active = false;
+    dragRef.current.pointerId = -1;
+    setIsDraggingCollections(false);
+  };
+
+  const handleCollectionPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      scrollLeft: event.currentTarget.scrollLeft,
+      active: true,
+      moved: false,
+    };
+  };
+
+  const handleCollectionPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+    const delta = event.clientX - drag.startX;
+    if (!drag.moved && Math.abs(delta) < 6) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setIsDraggingCollections(true);
+    }
+    event.preventDefault();
+    event.currentTarget.scrollLeft = drag.scrollLeft - delta;
+  };
+
+  const handleCollectionClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!dragRef.current.moved) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragRef.current.moved = false;
+  };
 
   return (
     <section className="bg-surface border-b border-borderSoft pt-5 sm:pt-12 pb-5 sm:pb-8">
@@ -61,7 +106,19 @@ export const Hero: React.FC = () => {
           </div>
 
           <div className="lg:flex lg:items-center lg:gap-4">
-            <div className="min-w-0 flex-1 overflow-x-auto no-scrollbar scroll-smooth flex items-center gap-2 py-1">
+            <div
+              ref={collectionShelfRef}
+              aria-label="Coleções disponíveis"
+              onPointerDown={handleCollectionPointerDown}
+              onPointerMove={handleCollectionPointerMove}
+              onPointerUp={(event) => finishCollectionDrag(event.pointerId)}
+              onPointerCancel={(event) => finishCollectionDrag(event.pointerId)}
+              onClickCapture={handleCollectionClickCapture}
+              onDragStart={(event) => event.preventDefault()}
+              className={`min-w-0 flex-1 overflow-x-auto no-scrollbar scroll-smooth flex items-center gap-2 py-1 ${
+                isDraggingCollections ? 'cursor-grabbing select-none scroll-auto' : 'cursor-grab'
+              }`}
+            >
               <button
                 onClick={() => setSelectedCollectionId('all')}
                 className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 active:scale-95 ${
