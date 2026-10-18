@@ -17,20 +17,30 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useStore } from "@/context/StoreContext";
+import { ArrowRight, ShoppingBag } from "lucide-react";
 
-export function DashboardInvoices() {
+export function DashboardInvoices({ onNavigateOrders }: { onNavigateOrders?: () => void }) {
 	const { orders } = useStore();
 
 	return (
-		<Card className="rounded-none bg-background shadow-none ring-0 sm:col-span-2 xl:col-span-4">
+		<Card className="min-w-0 overflow-hidden rounded-xl border-black/10 bg-white shadow-xs">
 			<CardHeader className="flex flex-row items-center justify-between">
 				<div>
-					<CardTitle>Vendas & Pedidos Recentes</CardTitle>
-					<CardDescription>Transações e status de pagamento da plataforma.</CardDescription>
+					<CardTitle className="text-base">Vendas & pedidos recentes</CardTitle>
+					<CardDescription>Últimas transações registradas na plataforma.</CardDescription>
 				</div>
+				<button type="button" onClick={onNavigateOrders} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 text-xs font-semibold text-primary transition-colors hover:bg-primary/5">
+					Ver todos <ArrowRight className="size-4" aria-hidden={true} />
+				</button>
 			</CardHeader>
 			<CardContent className="px-0 pb-2">
-				<Table className="border-t">
+				{orders.length === 0 ? (
+					<div className="flex min-h-48 flex-col items-center justify-center border-t px-6 text-center">
+						<span className="mb-3 flex size-11 items-center justify-center rounded-xl bg-muted text-muted-foreground"><ShoppingBag className="size-5" aria-hidden={true} /></span>
+						<p className="text-sm font-medium text-foreground">Nenhum pedido registrado</p>
+						<p className="mt-1 text-xs text-muted-foreground">As próximas vendas aparecerão aqui automaticamente.</p>
+					</div>
+				) : <Table className="border-t">
 					<TableHeader>
 						<TableRow className="hover:bg-transparent">
 							<TableHead className="w-[120px] pl-6">Pedido</TableHead>
@@ -98,7 +108,7 @@ export function DashboardInvoices() {
 							);
 						})}
 					</TableBody>
-				</Table>
+				</Table>}
 			</CardContent>
 		</Card>
 	);

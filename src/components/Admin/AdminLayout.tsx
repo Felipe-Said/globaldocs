@@ -1,22 +1,20 @@
 import React, { Suspense, lazy, useState } from 'react';
 import { useStore } from '@/context/StoreContext';
 import { AdminLogin } from './AdminLogin';
-import { 
-  LayoutGrid, 
-  Package, 
-  FolderTree, 
-  ShoppingBag, 
-  Tag, 
-  Image as ImageIcon,
-  Settings, 
-  ShieldCheck,
-  LogOut,
-  ExternalLink,
-  Store,
-  ChevronRight,
-  Key
+import {
+  Bell, ChevronRight, ExternalLink, FolderTree, Image as ImageIcon, Key,
+  LayoutGrid, LogOut, Package, Settings, ShieldCheck, ShoppingBag, Store, Tag,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import {
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
+  SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuBadge,
+  SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarRail,
+  SidebarSeparator, SidebarTrigger, useSidebar,
+} from '@/components/ui/sidebar';
 
 const Dashboard = lazy(() => import('@/components/dashboard').then(module => ({ default: module.Dashboard })));
 const AdminProducts = lazy(() => import('./AdminProducts').then(module => ({ default: module.AdminProducts })));
@@ -29,194 +27,215 @@ const AdminAPIs = lazy(() => import('./AdminAPIs').then(module => ({ default: mo
 
 type AdminTab = 'overview' | 'products' | 'collections' | 'banners' | 'orders' | 'coupons' | 'apis' | 'settings';
 
-export const AdminLayout: React.FC = () => {
-  const { isAdminAuthenticated, adminLogout, orders, settings } = useStore();
+type NavItem = {
+  id: AdminTab;
+  label: string;
+  shortLabel: string;
+  icon: LucideIcon;
+  badge?: number;
+};
+
+const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
+  {
+    label: 'Operação',
+    items: [
+      { id: 'overview', label: 'Visão Geral & Métricas', shortLabel: 'Visão geral', icon: LayoutGrid },
+      { id: 'products', label: 'Arquivos, LLC & Contas', shortLabel: 'Produtos', icon: Package },
+      { id: 'collections', label: 'Coleções', shortLabel: 'Coleções', icon: FolderTree },
+      { id: 'banners', label: 'Banners da Loja', shortLabel: 'Banners', icon: ImageIcon },
+    ],
+  },
+  {
+    label: 'Comercial',
+    items: [
+      { id: 'orders', label: 'Vendas & Pedidos', shortLabel: 'Pedidos', icon: ShoppingBag },
+      { id: 'coupons', label: 'Cupons de Desconto', shortLabel: 'Cupons', icon: Tag },
+    ],
+  },
+  {
+    label: 'Sistema',
+    items: [
+      { id: 'apis', label: 'APIs & Integrações', shortLabel: 'APIs', icon: Key },
+      { id: 'settings', label: 'Configurações', shortLabel: 'Configurações', icon: Settings },
+    ],
+  },
+];
+
+function AdminShell() {
+  const { adminLogout, orders, settings } = useStore();
+  const { setOpenMobile } = useSidebar();
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const pendingOrdersCount = orders.filter(order => order.status === 'pending').length;
+  const pendingDeliveries = orders.filter(order => order.status === 'paid' && order.items.some(item => item.requiresFulfillment) && order.fulfillmentStatus !== 'completed').length;
+  const totalAlerts = pendingOrdersCount + pendingDeliveries;
 
-  // If not authenticated, render the login gate
-  if (!isAdminAuthenticated) {
-    return <AdminLogin />;
-  }
+  const navGroups = NAV_GROUPS.map(group => ({
+    ...group,
+    items: group.items.map(item => item.id === 'orders' ? { ...item, badge: totalAlerts } : item),
+  }));
+  const activeItem = navGroups.flatMap(group => group.items).find(item => item.id === activeTab);
 
-  const pendingOrdersCount = orders.filter(o => o.status === 'pending').length;
-
-  const navItems = [
-    { id: 'overview' as AdminTab, label: 'Visão Geral & Métricas', icon: LayoutGrid },
-    { id: 'products' as AdminTab, label: 'Arquivos, LLC & Contas', icon: Package },
-    { id: 'collections' as AdminTab, label: 'Coleções', icon: FolderTree },
-    { id: 'banners' as AdminTab, label: 'Banners da Loja', icon: ImageIcon },
-    { id: 'orders' as AdminTab, label: 'Vendas & Pedidos', icon: ShoppingBag, badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined },
-    { id: 'coupons' as AdminTab, label: 'Cupons de Desconto', icon: Tag },
-    { id: 'apis' as AdminTab, label: 'APIs', icon: Key },
-    { id: 'settings' as AdminTab, label: 'Configurações', icon: Settings },
-  ];
-
-  const activeLabel = navItems.find(i => i.id === activeTab)?.label || 'Visão Geral';
+  const selectTab = (tab: AdminTab) => {
+    setActiveTab(tab);
+    setOpenMobile(false);
+  };
 
   return (
-    <div className="min-h-screen bg-muted/20 flex flex-col antialiased">
-      
-      {/* Top Application Header */}
-      <header className="sticky top-0 z-40 bg-background border-b h-14 px-4 sm:px-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 font-bold text-sm text-foreground">
-            <img 
-              src="/logo-icon.png" 
-              alt="Global DOCS" 
-              className="w-7 h-7 object-contain" 
-            />
-            <span>{settings.storeName} Admin</span>
-          </div>
-
-          <span className="text-muted-foreground/40 hidden sm:inline">•</span>
-
-          <nav className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>Admin</span>
-            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/60" />
-            <span className="font-semibold text-foreground">{activeLabel}</span>
-          </nav>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Link
-            to="/"
-            className="h-8 px-2.5 rounded-md bg-background hover:bg-muted text-xs font-medium border transition-colors flex items-center gap-1.5 shadow-xs"
-          >
-            <Store className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="hidden sm:inline">Ver Loja Pública</span>
-            <ExternalLink className="w-3 h-3 text-muted-foreground" />
-          </Link>
-
-          <button
-            onClick={adminLogout}
-            className="h-8 px-2.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-medium border border-rose-200 transition-colors cursor-pointer flex items-center gap-1.5"
-            title="Encerrar sessão"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Sair</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Main Container with Sidebar + Content */}
-      <div className="flex-1 flex max-w-7xl w-full mx-auto">
-        
-        {/* Desktop Sidebar Navigation */}
-        <aside className="w-64 border-r bg-background shrink-0 hidden md:flex flex-col justify-between p-4">
-          <div className="space-y-6">
-            <div>
-              <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Módulos de Gestão
-              </div>
-              <nav className="space-y-1">
-                {navItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeTab === item.id;
-
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveTab(item.id)}
-                      aria-current={isActive ? 'page' : undefined}
-                      className={`w-full h-9 px-3 rounded-md text-xs font-medium flex items-center justify-between transition-colors cursor-pointer text-left ${
-                        isActive
-                          ? 'bg-primary text-white font-semibold shadow-xs'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Icon className="w-4 h-4 shrink-0" />
-                        <span>{item.label}</span>
-                      </div>
-                      {item.badge !== undefined && (
-                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                          isActive ? 'bg-white text-primary' : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </nav>
+    <>
+      <Sidebar variant="inset" collapsible="icon" className="border-r-0">
+        <SidebarHeader className="p-2.5">
+          <div className="flex h-11 items-center gap-3 rounded-lg px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+            <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white shadow-xs ring-1 ring-black/10">
+              <img src="/logo-icon.png" alt="" className="size-7 object-contain" />
+            </div>
+            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+              <p className="truncate text-sm font-bold text-sidebar-foreground">{settings.storeName}</p>
+              <p className="truncate text-[11px] text-sidebar-foreground/60">Central administrativa</p>
             </div>
           </div>
+        </SidebarHeader>
 
-          <div className="p-3 bg-muted/40 rounded-lg border text-xs text-muted-foreground space-y-1">
-            <div className="font-semibold text-foreground flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Ambiente Protegido</span>
+        <SidebarSeparator />
+
+        <SidebarContent className="px-1 py-2">
+          {navGroups.map(group => (
+            <SidebarGroup key={group.label} className="p-1.5">
+              <SidebarGroupLabel className="h-7 text-[10px] font-bold uppercase tracking-[0.14em]">{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.items.map(item => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <SidebarMenuItem key={item.id}>
+                        <SidebarMenuButton
+                          type="button"
+                          size="default"
+                          isActive={isActive}
+                          tooltip={item.label}
+                          onClick={() => selectTab(item.id)}
+                          className="min-h-10 cursor-pointer rounded-lg px-3 data-[active=true]:bg-primary data-[active=true]:font-semibold data-[active=true]:text-white data-[active=true]:shadow-sm hover:bg-sidebar-accent"
+                        >
+                          <Icon className="size-4" aria-hidden={true} />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                        {Boolean(item.badge) && (
+                          <SidebarMenuBadge className={isActive ? 'bg-white text-primary' : 'bg-amber-100 text-amber-800'}>
+                            {item.badge}
+                          </SidebarMenuBadge>
+                        )}
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </SidebarContent>
+
+        <SidebarFooter className="gap-1.5 p-2.5">
+          <div className="rounded-lg border border-sidebar-border bg-white/70 p-2.5 group-data-[collapsible=icon]:hidden">
+            <div className="flex items-center gap-2 text-xs font-semibold text-sidebar-foreground">
+              <ShieldCheck className="size-4 text-emerald-600" aria-hidden={true} />
+              Ambiente protegido
             </div>
-            <p className="text-[11px] leading-relaxed">
-              Dados protegidos por autenticação Supabase e políticas de acesso no banco.
-            </p>
+            <p className="mt-1.5 text-[10px] leading-relaxed text-sidebar-foreground/60">Sessão administrativa protegida por autenticação e políticas de acesso.</p>
           </div>
-        </aside>
-
-        {/* Mobile Sub-Navigation Bar */}
-        <div className="md:hidden w-full border-b bg-background px-4 py-2 flex items-center gap-1 overflow-x-auto no-scrollbar">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                aria-current={isActive ? 'page' : undefined}
-                className={`h-8 px-2.5 rounded-md text-xs font-medium flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                  isActive
-                    ? 'bg-primary text-white font-semibold'
-                    : 'bg-muted/40 text-muted-foreground'
-                }`}
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                type="button"
+                size="default"
+                tooltip="Sair da conta"
+                onClick={adminLogout}
+                className="min-h-10 cursor-pointer text-rose-700 hover:bg-rose-50 hover:text-rose-800"
               >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
+                <LogOut className="size-4" aria-hidden={true} />
+                <span>Sair da conta</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+        <SidebarRail />
+      </Sidebar>
 
-        {/* Dynamic Content Body */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-          <Suspense fallback={<div className="text-xs text-muted-foreground">Carregando módulo...</div>}>
-            {activeTab === 'overview' && (
-              <div className="space-y-6">
-                <Dashboard />
-              </div>
-            )}
+      <SidebarInset className="min-w-0 overflow-hidden bg-[#f7f8fa] md:my-2 md:mr-2 md:rounded-2xl md:border md:border-black/5 md:shadow-sm">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-white/95 px-4 backdrop-blur sm:px-6">
+          <SidebarTrigger aria-label="Abrir ou recolher navegação" className="size-11 rounded-lg border text-muted-foreground hover:bg-muted" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span>Admin</span>
+              <ChevronRight className="size-3" aria-hidden={true} />
+              <span className="truncate">{activeItem?.shortLabel}</span>
+            </div>
+            <h1 className="truncate text-base font-semibold text-foreground">{activeItem?.label}</h1>
+          </div>
 
-            {activeTab === 'products' && (
-              <AdminProducts />
-            )}
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`${totalAlerts} pendências em pedidos`}
+              onClick={() => selectTab('orders')}
+              className="relative size-11 rounded-lg text-muted-foreground"
+            >
+              <Bell className="size-4" aria-hidden={true} />
+              {totalAlerts > 0 && (
+                <span className="absolute right-1.5 top-1.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white">
+                  {totalAlerts}
+                </span>
+              )}
+            </Button>
+            <Button asChild variant="outline" className="h-11 rounded-lg px-3 text-xs shadow-xs">
+              <Link to="/">
+                <Store className="size-4 text-muted-foreground" aria-hidden={true} />
+                <span className="hidden sm:inline">Ver loja</span>
+                <ExternalLink className="size-3 text-muted-foreground" aria-hidden={true} />
+              </Link>
+            </Button>
+            <Avatar className="size-9 ring-1 ring-black/10">
+              <AvatarFallback className="bg-primary text-xs font-bold text-white">A</AvatarFallback>
+            </Avatar>
+          </div>
+        </header>
 
-            {activeTab === 'collections' && (
-              <AdminCollections />
-            )}
-
-            {activeTab === 'banners' && (
-              <AdminBanners />
-            )}
-
-            {activeTab === 'orders' && (
-              <AdminOrders />
-            )}
-
-            {activeTab === 'coupons' && (
-              <AdminCoupons />
-            )}
-
-            {activeTab === 'apis' && (
-              <AdminAPIs />
-            )}
-
-            {activeTab === 'settings' && (
-              <AdminSettings />
-            )}
+        <main className="flex min-h-0 flex-1 flex-col p-4 sm:p-6 lg:p-8">
+          <Suspense fallback={<AdminModuleSkeleton />}>
+            {activeTab === 'overview' && <Dashboard onNavigateOrders={() => selectTab('orders')} />}
+            {activeTab === 'products' && <AdminProducts />}
+            {activeTab === 'collections' && <AdminCollections />}
+            {activeTab === 'banners' && <AdminBanners />}
+            {activeTab === 'orders' && <AdminOrders />}
+            {activeTab === 'coupons' && <AdminCoupons />}
+            {activeTab === 'apis' && <AdminAPIs />}
+            {activeTab === 'settings' && <AdminSettings />}
           </Suspense>
         </main>
+      </SidebarInset>
+    </>
+  );
+}
 
+function AdminModuleSkeleton() {
+  return (
+    <div className="space-y-4" role="status" aria-label="Carregando módulo">
+      <div className="h-8 w-64 animate-pulse rounded-md bg-black/10" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map(item => <div key={item} className="h-32 animate-pulse rounded-xl bg-black/5" />)}
       </div>
+      <div className="h-72 animate-pulse rounded-xl bg-black/5" />
     </div>
+  );
+}
+
+export const AdminLayout: React.FC = () => {
+  const { isAdminAuthenticated } = useStore();
+  if (!isAdminAuthenticated) return <AdminLogin />;
+
+  return (
+    <SidebarProvider defaultOpen>
+      <AdminShell />
+    </SidebarProvider>
   );
 };
