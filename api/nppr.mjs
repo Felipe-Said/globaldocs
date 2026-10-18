@@ -27,6 +27,52 @@ const readAllActiveProducts = async () => {
   return rows;
 };
 
+const startOfSaoPauloToday = () => {
+  const timeZone = 'America/Sao_Paulo';
+  const now = new Date();
+  const dateParts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  const utcMidnight = Date.UTC(Number(dateParts.year), Number(dateParts.month) - 1, Number(dateParts.day));
+  const offsetProbe = new Date(utcMidnight);
+  const offsetParts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(offsetProbe).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  const offset = Date.UTC(
+    Number(offsetParts.year),
+    Number(offsetParts.month) - 1,
+    Number(offsetParts.day),
+    Number(offsetParts.hour),
+    Number(offsetParts.minute),
+    Number(offsetParts.second),
+  ) - utcMidnight;
+  return new Date(utcMidnight - offset).toISOString();
+};
+
+const readTrafficRows = async ({ select, configure }) => {
+  const rows = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    let query = supabaseAdmin.from('store_visits').select(select);
+    query = configure(query).range(from, from + pageSize - 1);
+    const { data, error } = await query;
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
+};
+
 const clean = (value, max = 160) => String(value || '').trim().slice(0, max);
 
 const botIdentity = (userAgent, webdriver) => {
@@ -126,9 +172,34 @@ export default async function handler(request, response) {
     }
     if (request.method === 'GET' && request.query.action === 'traffic-metrics') {
       if (!await requireAdmin(request)) return json(response, 401, { error: 'Sessão administrativa inválida.' });
-      const { data, error } = await supabaseAdmin.rpc('get_store_traffic_metrics', { p_days: 30 });
+      const now = Date.now();
+      const [metricsResult, todayVisits, liveVisits] = await Promise.all([
+        supabaseAdmin.rpc('get_store_traffic_metrics', { p_days: 30 }),
+        readTrafficRows({
+          select: 'visitor_hash,visitor_type,source,created_at',
+          configure: query => query.gte('created_at', startOfSaoPauloToday()).order('created_at', { ascending: false }),
+        }),
+        readTrafficRows({
+          select: 'session_id,visitor_type,last_seen_at,ended_at',
+          configure: query => query.gte('last_seen_at', new Date(now - 20_000).toISOString()).is('ended_at', null),
+        }),
+      ]);
+      const { data, error } = metricsResult;
       if (error) throw error;
-      return json(response, 200, data || {});
+      const humanVisitors = new Set(todayVisits.filter(visit => visit.visitor_type === 'human').map(visit => visit.visitor_hash));
+      const botVisitors = new Set(todayVisits.filter(visit => visit.visitor_type === 'bot').map(visit => visit.visitor_hash));
+      const humanSessions = new Set(liveVisits.filter(visit => visit.visitor_type === 'human').map(visit => visit.session_id));
+      const botSessions = new Set(liveVisits.filter(visit => visit.visitor_type === 'bot').map(visit => visit.session_id));
+      return json(response, 200, {
+        ...(data || {}),
+        todayAccesses: todayVisits.length,
+        todayHumans: humanVisitors.size,
+        todayBots: botVisitors.size,
+        onlineHumans: humanSessions.size,
+        onlineBots: botSessions.size,
+        liveWindowSeconds: 20,
+        updatedAt: new Date(now).toISOString(),
+      });
     }
     if (request.method === 'GET' && request.query.action === 'traffic-heartbeat') {
       await updateStorePresence(request.query.sessionId);

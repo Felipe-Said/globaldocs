@@ -75,6 +75,7 @@ type TrafficMetrics = {
 
 function TrafficCard() {
   const [metrics, setMetrics] = useState<TrafficMetrics | null>(null);
+  const [livePresence, setLivePresence] = useState({ humans: 0, bots: 0, connected: false });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -105,6 +106,38 @@ function TrafficCard() {
     return () => window.clearInterval(interval);
   }, [refreshTraffic]);
 
+  useEffect(() => {
+    const channel = supabase.channel('store-live-presence');
+    const syncPresence = () => {
+      const state = channel.presenceState<Record<string, unknown>>();
+      let humans = 0;
+      let bots = 0;
+      for (const presences of Object.values(state)) {
+        const presence = presences.at(-1);
+        if (!presence) continue;
+        if (presence.visitorType === 'bot') bots += 1;
+        else humans += 1;
+      }
+      setLivePresence({ humans, bots, connected: true });
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        syncPresence();
+        void refreshTraffic();
+      })
+      .on('presence', { event: 'join' }, syncPresence)
+      .on('presence', { event: 'leave' }, syncPresence)
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') syncPresence();
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setLivePresence(current => ({ ...current, connected: false }));
+        }
+      });
+
+    return () => { void supabase.removeChannel(channel); };
+  }, [refreshTraffic]);
+
   const topSource = metrics?.topSources?.[0];
   const sourceShare = topSource && metrics?.todayAccesses
     ? Math.round((topSource.accesses / metrics.todayAccesses) * 100)
@@ -128,8 +161,8 @@ function TrafficCard() {
         ) : (
           <>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <TrafficValue icon={UserRound} label="Pessoas online" value={metrics?.onlineHumans} tone="text-emerald-600" loading={loading && !metrics} />
-              <TrafficValue icon={Bot} label="Bots ativos" value={metrics?.onlineBots} tone="text-amber-600" loading={loading && !metrics} />
+              <TrafficValue icon={UserRound} label="Pessoas online" value={livePresence.connected ? livePresence.humans : metrics?.onlineHumans} tone="text-emerald-600" loading={loading && !metrics && !livePresence.connected} />
+              <TrafficValue icon={Bot} label="Bots ativos" value={livePresence.connected ? livePresence.bots : metrics?.onlineBots} tone="text-amber-600" loading={loading && !metrics && !livePresence.connected} />
               <TrafficValue icon={UserRound} label="Pessoas hoje" value={metrics?.todayHumans} tone="text-cyan-700" loading={loading && !metrics} />
               <TrafficValue icon={Bot} label="Bots hoje" value={metrics?.todayBots} tone="text-orange-700" loading={loading && !metrics} />
             </div>

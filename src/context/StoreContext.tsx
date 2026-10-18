@@ -183,18 +183,26 @@ const readAllProducts = async () => {
   return { data: rows, error: null };
 };
 
-const isStorefrontPath = () => typeof window !== 'undefined' && /^\/(?:$|colecao(?:\/|$)|collection(?:\/|$))/.test(window.location.pathname);
+const isPublicTrafficPath = () => typeof window !== 'undefined' && !window.location.pathname.startsWith('/admin');
+
+const browserVisitorType = (): 'human' | 'bot' => {
+  if (typeof navigator === 'undefined') return 'human';
+  return navigator.webdriver || /bot|crawler|spider|headless|phantom|selenium|playwright|puppeteer|googlebot|bingbot|facebookexternalhit|meta-externalagent|tiktokspider/i.test(navigator.userAgent)
+    ? 'bot'
+    : 'human';
+};
 
 const getStoreVisitSession = () => {
-  if (!isStorefrontPath()) return null;
+  if (!isPublicTrafficPath()) return null;
   try {
-    const stored = JSON.parse(window.localStorage.getItem('store-visit-session') || window.sessionStorage.getItem('store-visit-session') || 'null');
+    const stored = JSON.parse(window.sessionStorage.getItem('store-visit-tab-session') || 'null');
     const now = Date.now();
-    const session = stored?.id && now - Number(stored.lastActivityAt || stored.startedAt || 0) < 30 * 60 * 1000
+    const session = stored?.id && now - Number(stored.lastActivityAt || stored.startedAt || 0) < 12 * 60 * 60 * 1000
       ? stored
       : { id: crypto.randomUUID(), startedAt: now, lastActivityAt: now };
     session.lastActivityAt = now;
-    window.localStorage.setItem('store-visit-session', JSON.stringify(session));
+    window.sessionStorage.setItem('store-visit-tab-session', JSON.stringify(session));
+    window.localStorage.removeItem('store-visit-session');
     window.sessionStorage.removeItem('store-visit-session');
     return session as { id: string; startedAt: number; lastActivityAt: number };
   } catch {
@@ -487,30 +495,63 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     const session = getStoreVisitSession();
     if (!session) return;
+    let subscribed = false;
+    let presenceTracked = false;
+    const visitorType = browserVisitorType();
+    const presenceChannel = supabase.channel('store-live-presence', {
+      config: { presence: { key: session.id } },
+    });
+
     const heartbeat = () => {
-      if (document.visibilityState !== 'visible' || !isStorefrontPath()) return;
+      if (document.visibilityState !== 'visible' || !isPublicTrafficPath()) return;
       session.lastActivityAt = Date.now();
-      try { window.localStorage.setItem('store-visit-session', JSON.stringify(session)); } catch { /* presença continua sem persistência local */ }
+      try { window.sessionStorage.setItem('store-visit-tab-session', JSON.stringify(session)); } catch { /* presença continua sem persistência local */ }
       void fetch(`/api/nppr?action=traffic-heartbeat&sessionId=${encodeURIComponent(session.id)}`, {
         cache: 'no-store',
         keepalive: true,
       }).catch(() => undefined);
     };
+
+    const trackPresence = () => {
+      if (!subscribed || presenceTracked || document.visibilityState !== 'visible' || !isPublicTrafficPath()) return;
+      presenceTracked = true;
+      void presenceChannel.track({
+        sessionId: session.id,
+        visitorType,
+        path: window.location.pathname,
+        onlineAt: new Date().toISOString(),
+      }).catch(() => { presenceTracked = false; });
+      heartbeat();
+    };
+
     const leave = () => {
+      if (presenceTracked) {
+        presenceTracked = false;
+        void presenceChannel.untrack().catch(() => undefined);
+      }
       const payload = JSON.stringify({ action: 'traffic-leave', sessionId: session.id });
       if (navigator.sendBeacon) navigator.sendBeacon('/api/nppr', new Blob([payload], { type: 'application/json' }));
+      else void fetch('/api/nppr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(() => undefined);
     };
+
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') heartbeat();
+      if (document.visibilityState === 'visible') trackPresence();
+      else leave();
     };
-    heartbeat();
-    const interval = window.setInterval(heartbeat, 30_000);
+
+    presenceChannel.subscribe(status => {
+      subscribed = status === 'SUBSCRIBED';
+      if (subscribed) trackPresence();
+    });
+    const interval = window.setInterval(heartbeat, 8_000);
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('pagehide', leave);
     return () => {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('pagehide', leave);
+      leave();
+      void supabase.removeChannel(presenceChannel);
     };
   }, []);
 
