@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'node:crypto';
+import { readJsonBody } from './payment-security.mjs';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -17,11 +19,7 @@ export const json = (response, status, body) => {
   response.end(JSON.stringify(body));
 };
 
-export const readBody = request => {
-  if (request.body && typeof request.body === 'object') return request.body;
-  if (typeof request.body === 'string' && request.body) return JSON.parse(request.body);
-  return {};
-};
+export const readBody = readJsonBody;
 
 export const requireAdmin = async request => {
   const authorization = request.headers.authorization || '';
@@ -46,6 +44,26 @@ export const requireCustomer = async request => {
   if (!token) return null;
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   return error ? null : data.user;
+};
+
+export const requestIdentity = request => String(
+  request.headers?.['x-forwarded-for'] || request.headers?.['x-real-ip'] || 'unknown',
+).split(',')[0].trim().slice(0, 128);
+
+export const enforceRateLimit = async (scope, identity, limit, windowSeconds) => {
+  const rateKey = crypto.createHmac('sha256', serviceRoleKey)
+    .update(`${scope}:${String(identity || 'unknown')}`)
+    .digest('hex');
+  const { data, error } = await supabaseAdmin.rpc('consume_api_rate_limit', {
+    p_key: rateKey,
+    p_limit: limit,
+    p_window_seconds: windowSeconds,
+  });
+  if (error) {
+    console.error('[security:rate-limit-unavailable]', { scope, message: error.message });
+    return true;
+  }
+  return data === true;
 };
 
 export const getNowPaymentsSettings = async () => {

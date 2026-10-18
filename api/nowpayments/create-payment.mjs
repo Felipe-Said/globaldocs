@@ -2,35 +2,27 @@ import {
   callNowPayments,
   getNowPaymentsQuote,
   getNowPaymentsSettings,
+  enforceRateLimit,
   json,
   publicPayment,
   readBody,
+  requireCustomer,
   supabaseAdmin,
 } from '../../server/nowpayments.mjs';
-
-const callbackUrl = request => {
-  const publicOrigin = 'https://globaldocs.vercel.app';
-  const configured = String(process.env.SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || '').trim();
-  const forwardedHost = String(request.headers['x-forwarded-host'] || request.headers.host || '').split(',')[0].trim();
-  const candidate = configured || (forwardedHost ? `https://${forwardedHost}` : publicOrigin);
-
-  try {
-    const normalized = new URL(candidate.startsWith('http') ? candidate : `https://${candidate}`);
-    if (normalized.protocol !== 'https:') return `${publicOrigin}/api/nowpayments/ipn`;
-    return new URL('/api/nowpayments/ipn', normalized.origin).href;
-  } catch {
-    return `${publicOrigin}/api/nowpayments/ipn`;
-  }
-};
+import { trustedCallbackUrl } from '../../server/payment-security.mjs';
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') return json(response, 405, { error: 'Método não permitido.' });
 
   try {
+    const customer = await requireCustomer(request);
+    if (!customer) return json(response, 401, { error: 'Entre na sua conta para gerar a cobrança.' });
+    if (!await enforceRateLimit('crypto-create', customer.id, 10, 600)) {
+      return json(response, 429, { error: 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' });
+    }
     const body = readBody(request);
     const orderId = String(body.orderId || '').trim();
-    const downloadToken = String(body.downloadToken || '').trim();
-    if (!orderId || !downloadToken) return json(response, 400, { error: 'Pedido inválido.' });
+    if (!orderId) return json(response, 400, { error: 'Pedido inválido.' });
 
     const settings = await getNowPaymentsSettings();
     if (!settings.enabled || !settings.api_key || !settings.ipn_secret) {
@@ -39,9 +31,9 @@ export default async function handler(request, response) {
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id,total,status,payment_method,download_token,items,created_at')
+      .select('id,total,status,payment_method,customer_user_id,items,created_at')
       .eq('id', orderId)
-      .eq('download_token', downloadToken)
+      .eq('customer_user_id', customer.id)
       .eq('payment_method', 'crypto')
       .single();
     if (orderError || !order) return json(response, 404, { error: 'Pedido não encontrado.' });
@@ -80,7 +72,7 @@ export default async function handler(request, response) {
         price_amount: Number(order.total),
         price_currency: 'brl',
         pay_currency: settings.pay_currency,
-        ipn_callback_url: callbackUrl(request),
+        ipn_callback_url: trustedCallbackUrl(),
         order_id: order.id,
         order_description: description || `Pedido ${order.id}`,
         is_fixed_rate: true,

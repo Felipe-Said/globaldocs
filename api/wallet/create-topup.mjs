@@ -1,5 +1,6 @@
 import {
   callNowPayments,
+  enforceRateLimit,
   getNowPaymentsQuote,
   getNowPaymentsSettings,
   json,
@@ -8,19 +9,7 @@ import {
   requireCustomer,
   supabaseAdmin,
 } from '../../server/nowpayments.mjs';
-
-const callbackUrl = request => {
-  const fallback = 'https://globaldocs.vercel.app';
-  const configured = String(process.env.SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || '').trim();
-  const forwardedHost = String(request.headers['x-forwarded-host'] || request.headers.host || '').split(',')[0].trim();
-  try {
-    const origin = configured || (forwardedHost ? `https://${forwardedHost}` : fallback);
-    const normalized = new URL(origin.startsWith('http') ? origin : `https://${origin}`);
-    return new URL('/api/nowpayments/ipn', normalized.origin).href;
-  } catch {
-    return `${fallback}/api/nowpayments/ipn`;
-  }
-};
+import { trustedCallbackUrl } from '../../server/payment-security.mjs';
 
 const topupPaymentForClient = (topup, payment) => ({
   topUpId: topup.id,
@@ -35,6 +24,9 @@ export default async function handler(request, response) {
   try {
     const customer = await requireCustomer(request);
     if (!customer) return json(response, 401, { error: 'Entre na sua conta para adicionar saldo.' });
+    if (!await enforceRateLimit('wallet-topup-create', customer.id, 5, 600)) {
+      return json(response, 429, { error: 'Muitas solicitações de recarga. Aguarde alguns minutos.' });
+    }
 
     const body = readBody(request);
     const amount = Math.round(Number(body.amount) * 100) / 100;
@@ -76,7 +68,7 @@ export default async function handler(request, response) {
           price_amount: amount,
           price_currency: 'brl',
           pay_currency: settings.pay_currency,
-          ipn_callback_url: callbackUrl(request),
+          ipn_callback_url: trustedCallbackUrl(),
           order_id: `wallet_topup:${topup.id}`,
           order_description: 'Recarga de saldo da carteira',
           is_fixed_rate: true,

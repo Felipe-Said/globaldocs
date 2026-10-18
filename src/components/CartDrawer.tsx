@@ -6,6 +6,7 @@ import { detectCountries } from '../utils/countryDetection';
 import { CountryBadgesList } from './CountryBadge';
 import { UsdtEstimate, UsdtQuote } from './UsdtEstimate';
 import { GATEWAY_LOGOS } from '../utils/gatewayLogos';
+import { supabase } from '../lib/supabase';
 import { Order, PaymentMethod } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -207,11 +208,16 @@ export const CartDrawer: React.FC = () => {
 
     const checkStatus = async () => {
       try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) return;
         const params = new URLSearchParams({
           orderId: completedOrder.id,
-          downloadToken: completedOrder.downloadToken,
         });
-        const response = await fetch(`/api/nowpayments/status?${params.toString()}`, { cache: 'no-store' });
+        const response = await fetch(`/api/nowpayments/status?${params.toString()}`, {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
         const result = await response.json();
         if (!response.ok) {
           if (result.orderCancelled) {
@@ -364,10 +370,13 @@ export const CartDrawer: React.FC = () => {
       setCompletedOrder(order);
       setCryptoError('');
       try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error('Sua sessão expirou. Entre novamente para continuar.');
         const response = await fetch('/api/nowpayments/create-payment', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: order.id, downloadToken: order.downloadToken }),
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ orderId: order.id }),
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Não foi possível gerar a cobrança em USDT.');

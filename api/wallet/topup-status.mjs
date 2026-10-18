@@ -1,5 +1,6 @@
 import {
   callNowPayments,
+  enforceRateLimit,
   getNowPaymentsSettings,
   isPaidStatus,
   json,
@@ -8,6 +9,7 @@ import {
   requireCustomer,
   supabaseAdmin,
 } from '../../server/nowpayments.mjs';
+import { verifyFinalPayment } from '../../server/payment-security.mjs';
 
 const topupStatus = status => {
   if (isPaidStatus(status)) return 'paid';
@@ -21,6 +23,10 @@ export default async function handler(request, response) {
   try {
     const customer = await requireCustomer(request);
     if (!customer) return json(response, 401, { error: 'Sessão inválida.' });
+    if (!await enforceRateLimit('wallet-topup-status', customer.id, 40, 60)) {
+      response.setHeader('Retry-After', '30');
+      return json(response, 429, { error: 'Aguarde um instante antes de consultar novamente.' });
+    }
     const topUpId = String(request.method === 'POST' ? readBody(request).topUpId : request.query.topUpId || '').trim();
     if (!topUpId) return json(response, 400, { error: 'Recarga inválida.' });
 
@@ -65,6 +71,16 @@ export default async function handler(request, response) {
 
       const providerStatus = String(provider?.payment_status || stored.payment_status || 'waiting');
       if (isPaidStatus(providerStatus)) {
+        const verification = verifyFinalPayment({
+          provider,
+          stored,
+          expectedOrderId: `wallet_topup:${topup.id}`,
+          expectedPriceAmount: topup.amount,
+        });
+        if (!verification.valid) {
+          console.error('[wallet:cancel:reconciliation-failed]', { paymentId: stored.payment_id, reason: verification.reason });
+          return json(response, 409, { error: 'O pagamento está em verificação e não pode ser cancelado agora.' });
+        }
         await supabaseAdmin.from('wallet_topup_payments').update({
           payment_status: providerStatus,
           actually_paid: provider?.actually_paid || provider?.amount_received || stored.actually_paid || 0,
@@ -106,8 +122,15 @@ export default async function handler(request, response) {
     let provider;
     try {
       provider = await callNowPayments(settings, `/payment/${encodeURIComponent(stored.payment_id)}`, { method: 'GET' });
-    } catch {
-      provider = stored.raw_response;
+    } catch (error) {
+      console.error('[wallet:status:provider-unavailable]', { paymentId: stored.payment_id, status: error.status || 502 });
+      return json(response, 200, {
+        topUpId: topup.id,
+        amount: Number(topup.amount),
+        topUpStatus: topup.status,
+        verificationPending: true,
+        ...publicPayment(stored),
+      });
     }
 
     const status = String(provider.payment_status || stored.payment_status);
@@ -115,6 +138,16 @@ export default async function handler(request, response) {
     const mappedStatus = topup.status === 'cancelled' && providerStatus !== 'paid'
       ? 'cancelled'
       : providerStatus;
+    const verification = isPaidStatus(status) ? verifyFinalPayment({
+      provider,
+      stored,
+      expectedOrderId: `wallet_topup:${topup.id}`,
+      expectedPriceAmount: topup.amount,
+    }) : { valid: false, reason: 'payment_not_finished' };
+    const safeMappedStatus = mappedStatus === 'paid' && !verification.valid ? 'pending' : mappedStatus;
+    if (mappedStatus === 'paid' && !verification.valid) {
+      console.error('[wallet:status:reconciliation-failed]', { paymentId: stored.payment_id, reason: verification.reason });
+    }
     const updates = {
       payment_status: status,
       actually_paid: provider.actually_paid || provider.amount_received || stored.actually_paid || 0,
@@ -128,26 +161,28 @@ export default async function handler(request, response) {
       .single();
 
     let balance;
-    if (mappedStatus === 'paid') {
+    if (safeMappedStatus === 'paid') {
       const { data: credited, error: creditError } = await supabaseAdmin.rpc('credit_wallet_topup', {
         p_topup_id: topup.id,
         p_provider_payment_id: stored.payment_id,
       });
       if (creditError) throw creditError;
       balance = Number(credited.balance);
-    } else if (mappedStatus !== topup.status && topup.status !== 'cancelled') {
-      await supabaseAdmin.from('wallet_topups').update({ status: mappedStatus }).eq('id', topup.id);
+    } else if (safeMappedStatus !== topup.status && topup.status !== 'cancelled') {
+      await supabaseAdmin.from('wallet_topups').update({ status: safeMappedStatus }).eq('id', topup.id);
     }
 
     return json(response, 200, {
       topUpId: topup.id,
       amount: Number(topup.amount),
-      topUpStatus: mappedStatus,
+      topUpStatus: safeMappedStatus,
       balance,
+      verificationPending: mappedStatus === 'paid' && !verification.valid,
       ...publicPayment(payment || { ...stored, ...updates }),
     });
   } catch (error) {
-    return json(response, 500, { error: error.message || 'Não foi possível consultar a recarga.' });
+    console.error('[wallet:status]', { status: error.status || 500, message: error.message || 'unknown error' });
+    return json(response, error.status || 500, { error: 'Não foi possível consultar a recarga.' });
   }
 }
 
