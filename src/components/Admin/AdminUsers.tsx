@@ -55,7 +55,7 @@ export const AdminUsers: React.FC = () => {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) throw new Error('Sessão administrativa expirada. Entre novamente.');
-      const response = await fetch('/api/admin/users', {
+      const response = await fetch('/api/nppr?action=users', {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
         signal,
