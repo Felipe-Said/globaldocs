@@ -13,25 +13,25 @@ type BioLink = {
 
 const collectionLinks: BioLink[] = [
   {
-    label: 'Contas',
+    label: 'Contas Meta',
     accessibleLabel: 'Acessar coleção de Contas Meta',
     brand: 'meta',
     to: '/colecao/catalogo-facebook',
   },
   {
-    label: 'Contas',
+    label: 'Contas Google',
     accessibleLabel: 'Acessar coleção de Contas Google',
     brand: 'google',
     to: '/colecao/catalogo-google',
   },
   {
-    label: 'Contas',
+    label: 'Contas TikTok',
     accessibleLabel: 'Acessar coleção de Contas TikTok',
     brand: 'tiktok',
     to: '/colecao/catalogo-tiktok',
   },
   {
-    label: 'Temas',
+    label: 'Temas Shopify',
     accessibleLabel: 'Acessar coleção de Temas Shopify',
     brand: 'shopify',
     to: '/colecao/temas-shopify',
