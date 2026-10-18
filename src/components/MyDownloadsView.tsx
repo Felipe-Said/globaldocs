@@ -16,6 +16,13 @@ import { CustomerDashboardSidebar, type CustomerPanelView } from './ui/dashboard
 type AccessStep = 'email' | 'code';
 type AccessMode = 'login' | 'register';
 
+const getRequestedCustomerView = (search: string): CustomerPanelView => {
+  const requestedView = new URLSearchParams(search).get('view');
+  return ['overview', 'orders', 'downloads', 'wallet', 'profile'].includes(requestedView || '')
+    ? requestedView as CustomerPanelView
+    : 'overview';
+};
+
 export const MyDownloadsView: React.FC = () => {
   const {
     orders, downloadFile, customerUser, customerLogin, requestCustomerCode, verifyCustomerCode,
@@ -35,7 +42,7 @@ export const MyDownloadsView: React.FC = () => {
   const [resendIn, setResendIn] = useState(0);
   const [filterQuery, setFilterQuery] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<CustomerPanelView>('overview');
+  const [activeView, setActiveView] = useState<CustomerPanelView>(() => getRequestedCustomerView(location.search));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [profileName, setProfileName] = useState('');
@@ -55,8 +62,12 @@ export const MyDownloadsView: React.FC = () => {
     if (!customerUser) return;
     setProfileName(customerUser.name || '');
     setProfileDocument(formatTaxId(customerUser.document || ''));
-    if (!customerUser.name?.trim() || !customerUser.document?.trim()) setActiveView('profile');
-  }, [customerUser]);
+    if (!customerUser.name?.trim() || !customerUser.document?.trim()) {
+      setActiveView('profile');
+      return;
+    }
+    setActiveView(getRequestedCustomerView(location.search));
+  }, [customerUser, location.search]);
 
   useEffect(() => {
     if (!walletPayment || ['paid', 'failed', 'expired', 'refunded', 'cancelled'].includes(walletPayment.topUpStatus)) return;

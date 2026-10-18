@@ -1,6 +1,6 @@
 import React from 'react';
 import { useStore } from '../context/StoreContext';
-import { Mail } from 'lucide-react';
+import { Instagram, Mail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GATEWAY_LOGOS } from '../utils/gatewayLogos';
 
@@ -47,10 +47,10 @@ export const Footer: React.FC = () => {
   return (
     <footer className="bg-surface border-t border-borderSoft mt-20 pt-16 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className={`grid grid-cols-1 ${activeCollections.length > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-8 pb-12 border-b border-borderSoft`}>
+        <div className="grid grid-cols-1 gap-8 border-b border-borderSoft pb-12 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
           
           {/* Brand & Editorial Column */}
-          <div className="md:col-span-2 space-y-4">
+          <div className="space-y-4 sm:col-span-2 lg:col-span-2 xl:col-span-2">
             <Link to="/" className="inline-block focus:outline-none">
               <img 
                 src="/logo.png" 
@@ -88,6 +88,18 @@ export const Footer: React.FC = () => {
             </div>
           )}
 
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-ink">
+              Políticas
+            </h4>
+            <ul className="space-y-2 text-xs text-ink-muted">
+              <li><Link to="/politicas#termos" className="block transition-colors hover:text-primary">Termos de Uso</Link></li>
+              <li><Link to="/politicas#privacidade" className="block transition-colors hover:text-primary">Privacidade e LGPD</Link></li>
+              <li><Link to="/politicas#reembolso" className="block transition-colors hover:text-primary">Trocas e Reembolsos</Link></li>
+              <li><Link to="/politicas#entrega" className="block transition-colors hover:text-primary">Entrega Digital</Link></li>
+            </ul>
+          </div>
+
           {/* Links Column 2: Cliente */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-ink uppercase tracking-wider">
@@ -96,20 +108,31 @@ export const Footer: React.FC = () => {
             <ul className="space-y-2 text-xs text-ink-muted">
               <li>
                 <Link 
-                  to="/conta"
+                  to="/conta?view=overview"
                   className="hover:text-primary transition-colors cursor-pointer text-left block"
                 >
-                  Minha Conta & Pedidos
+                  Visão geral
                 </Link>
               </li>
               <li>
-                <span className="cursor-default">Download e Liberação Imediata</span>
+                <Link to="/conta?view=orders" className="block transition-colors hover:text-primary">
+                  Meus pedidos
+                </Link>
               </li>
               <li>
-                <span className="cursor-default">Validação de Token e Licença</span>
+                <Link to="/conta?view=downloads" className="block transition-colors hover:text-primary">
+                  Downloads e acessos
+                </Link>
               </li>
               <li>
-                <span className="cursor-default">Termos de Uso e Sigilo</span>
+                <Link to="/conta?view=wallet" className="block transition-colors hover:text-primary">
+                  Minha carteira
+                </Link>
+              </li>
+              <li>
+                <Link to="/conta?view=profile" className="block transition-colors hover:text-primary">
+                  Meu perfil
+                </Link>
               </li>
             </ul>
           </div>
@@ -120,12 +143,23 @@ export const Footer: React.FC = () => {
               Atendimento & Suporte
             </h4>
             <ul className="space-y-2 text-xs text-ink-muted">
-              <li className="flex items-center gap-1 text-ink-muted">
-                <Mail className="w-3.5 h-3.5" />
-                <span>{settings.contactEmail}</span>
+              <li>
+                <a href={`mailto:${settings.contactEmail}`} className="inline-flex min-h-6 items-center gap-1.5 break-all transition-colors hover:text-primary">
+                  <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>{settings.contactEmail}</span>
+                </a>
               </li>
               <li>
-                <span>WhatsApp: {settings.supportWhatsapp}</span>
+                <a
+                  href="https://www.instagram.com/globaldocs.sbs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Abrir o Instagram da Global DOCs"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-borderSoft bg-white px-3 font-semibold text-ink transition-colors hover:border-primary/40 hover:bg-primary-tint hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                >
+                  <Instagram className="h-4 w-4" aria-hidden="true" />
+                  <span>@globaldocs.sbs</span>
+                </a>
               </li>
             </ul>
           </div>
@@ -134,12 +168,12 @@ export const Footer: React.FC = () => {
 
         {/* Bottom Sub-bar with Borderless Gateway Logos */}
         <div className="pt-8 flex flex-col md:flex-row items-center justify-between text-[11px] text-ink-muted gap-4">
-          <div className="flex items-center gap-4">
-            <span>Privacidade & LGPD</span>
+          <div className="flex flex-wrap items-center justify-center gap-3 md:justify-start">
+            <Link to="/politicas#privacidade" className="transition-colors hover:text-primary">Privacidade & LGPD</Link>
             <span>•</span>
-            <span>Licença de Uso Comercial</span>
+            <Link to="/politicas#termos" className="transition-colors hover:text-primary">Termos de Uso</Link>
             <span>•</span>
-            <span>Garantia de Download Imediato</span>
+            <Link to="/politicas#entrega" className="transition-colors hover:text-primary">Entrega Digital</Link>
           </div>
 
           {hasActivePayments && (
