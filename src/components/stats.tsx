@@ -52,7 +52,7 @@ export function DashboardStats() {
       <StatCard stat={dynamicStats[0]} />
       <StatCard stat={dynamicStats[1]} />
       <TrafficCard />
-      <StatCard stat={dynamicStats[2]} />
+      <StatCard stat={dynamicStats[2]} className="xl:col-span-2 2xl:col-span-1" />
       <IntegrationBalanceCard />
     </>
   );
@@ -147,7 +147,7 @@ function TrafficCard() {
 function TrafficValue({ icon: Icon, label, value, tone, loading }: { icon: LucideIcon; label: string; value?: number; tone: string; loading: boolean }) {
   return (
     <div className="min-w-0 rounded-lg bg-slate-50 px-3 py-2">
-      <p className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground"><Icon className={`size-3.5 shrink-0 ${tone}`} aria-hidden={true} /><span className="truncate" title={label}>{label}</span></p>
+      <p className="flex min-h-8 items-start gap-1.5 text-[11px] leading-4 text-muted-foreground"><Icon className={`mt-0.5 size-3.5 shrink-0 ${tone}`} aria-hidden={true} /><span>{label}</span></p>
       <p className="mt-1 text-xl font-semibold leading-none tabular-nums text-foreground">{loading ? '—' : Number(value || 0).toLocaleString('pt-BR')}</p>
     </div>
   );
@@ -191,7 +191,7 @@ function IntegrationBalanceCard() {
   }, [refreshBalance]);
 
   return (
-    <Card className={`${metricCardClass} ${error ? 'border-rose-200' : balance?.total === 0 ? 'border-amber-200' : ''}`}>
+    <Card className={`${metricCardClass} xl:col-span-2 2xl:col-span-1 ${error ? 'border-rose-200' : balance?.total === 0 ? 'border-amber-200' : ''}`}>
       <div className="flex h-full flex-col p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -217,10 +217,10 @@ function IntegrationBalanceCard() {
   );
 }
 
-function StatCard({ stat }: { stat: Stat }) {
+function StatCard({ stat, className = '' }: { stat: Stat; className?: string }) {
   const Icon = stat.icon;
   return (
-    <Card className={metricCardClass}>
+    <Card className={`${metricCardClass} ${className}`}>
       <div className="flex h-full flex-col p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
