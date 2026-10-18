@@ -108,7 +108,7 @@ function TrafficCard() {
     : 0;
 
   return (
-    <Card className={`rounded-xl border-black/10 bg-white shadow-xs transition-shadow hover:shadow-md ${error ? 'border-rose-200' : ''}`}>
+    <Card className={`rounded-xl border-black/10 bg-white shadow-xs transition-shadow hover:shadow-md xl:col-span-2 ${error ? 'border-rose-200' : ''}`}>
       <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
         <div className="min-w-0 space-y-1">
           <CardTitle className="text-sm font-medium">Acessos da loja</CardTitle>
