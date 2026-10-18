@@ -42,6 +42,13 @@ export default async function handler(request, response) {
       return json(response, 400, { error: 'Informe um valor de recarga entre R$ 1,00 e R$ 100.000,00.' });
     }
 
+    await supabaseAdmin
+      .from('wallet_topups')
+      .update({ status: 'expired' })
+      .eq('user_id', customer.id)
+      .eq('status', 'pending')
+      .lte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+
     const settings = await getNowPaymentsSettings();
     if (!settings.enabled || !settings.api_key || !settings.ipn_secret) {
       return json(response, 503, { error: 'A recarga via USDT está temporariamente indisponível.' });

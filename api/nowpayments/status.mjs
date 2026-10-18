@@ -19,11 +19,16 @@ export default async function handler(request, response) {
 
     const { data: order } = await supabaseAdmin
       .from('orders')
-      .select('id,status,download_token')
+      .select('id,status,download_token,created_at')
       .eq('id', orderId)
       .eq('download_token', downloadToken)
       .single();
     if (!order) return json(response, 404, { error: 'Pedido não encontrado.' });
+    if (order.status === 'cancelled') return json(response, 410, { error: 'Este pedido foi cancelado.', orderCancelled: true });
+    if (order.status === 'pending' && Date.now() - new Date(order.created_at).getTime() >= 24 * 60 * 60 * 1000) {
+      await supabaseAdmin.from('orders').update({ status: 'cancelled' }).eq('id', order.id).eq('status', 'pending');
+      return json(response, 410, { error: 'Este pedido expirou após 24 horas sem pagamento.', orderCancelled: true });
+    }
 
     const { data: stored } = await supabaseAdmin
       .from('nowpayments_payments')
@@ -54,8 +59,8 @@ export default async function handler(request, response) {
       .single();
 
     const paid = isPaidStatus(status) || order.status === 'paid';
-    if (isPaidStatus(status) && order.status !== 'paid') {
-      await supabaseAdmin.from('orders').update({ status: 'paid' }).eq('id', order.id);
+    if (isPaidStatus(status) && order.status === 'pending') {
+      await supabaseAdmin.from('orders').update({ status: 'paid' }).eq('id', order.id).eq('status', 'pending');
     }
     if (paid) await fulfillNpprOrder(order.id);
 

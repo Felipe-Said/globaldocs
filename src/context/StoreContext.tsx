@@ -21,7 +21,7 @@ export interface WalletTransaction {
 export interface WalletTopUp {
   id: string;
   amount: number;
-  status: 'pending' | 'paid' | 'failed' | 'expired' | 'refunded';
+  status: 'pending' | 'paid' | 'failed' | 'expired' | 'refunded' | 'cancelled';
   createdAt: string;
   paidAt?: string;
 }
@@ -56,6 +56,7 @@ interface StoreContextType {
   refreshWallet: () => Promise<void>;
   createWalletTopUp: (amount: number) => Promise<Result>;
   checkWalletTopUp: (topUpId: string) => Promise<Result>;
+  cancelWalletTopUp: (topUpId: string) => Promise<Result>;
   refreshCustomerOrders: () => Promise<void>;
   customerLogout: () => Promise<void>;
   isAdminAuthenticated: boolean;
@@ -304,6 +305,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const loadAdminData = async () => {
+    await supabase.rpc('expire_stale_pending_records');
     const [productResult, collectionResult, bannerResult, settingsResult, deliverableResult, orderResult, couponResult] = await Promise.all([
       readAllProducts(),
       supabase.from('collections').select('*').order('created_at'),
@@ -618,6 +620,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return { success: true, message: 'Recarga atualizada.', payment: payload as WalletTopUpPayment };
   };
 
+  const cancelWalletTopUp = async (topUpId: string): Promise<Result> => {
+    const token = await customerAccessToken();
+    if (!token) return { success: false, message: 'Sua sessão expirou. Entre novamente.' };
+    const response = await fetch('/api/wallet/cancel-topup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ topUpId }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    await refreshWallet();
+    if (!response.ok) return { success: false, message: payload.error || 'Não foi possível cancelar a recarga.' };
+    return { success: true, message: 'Solicitação de recarga cancelada.', payment: payload as WalletTopUpPayment };
+  };
+
   const refreshCustomerOrders = async () => { if (customerUser) await loadCustomerData(); };
   const customerLogout = async () => {
     await supabase.auth.signOut();
@@ -793,7 +809,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return <StoreContext.Provider value={{
     selectedProduct, setSelectedProduct, isCartOpen, setIsCartOpen, isCheckoutOpen, setIsCheckoutOpen,
     customerUser, customerLogin, requestCustomerCode, verifyCustomerCode, updateCustomerProfile,
-    walletBalance, walletTransactions, walletTopUps, refreshWallet, createWalletTopUp, checkWalletTopUp,
+    walletBalance, walletTransactions, walletTopUps, refreshWallet, createWalletTopUp, checkWalletTopUp, cancelWalletTopUp,
     refreshCustomerOrders, customerLogout,
     isAdminAuthenticated, adminLogin, adminLogout,
     products, addProduct, updateProduct, deleteProduct, toggleProductStatus,

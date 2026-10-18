@@ -213,7 +213,14 @@ export const CartDrawer: React.FC = () => {
         });
         const response = await fetch(`/api/nowpayments/status?${params.toString()}`, { cache: 'no-store' });
         const result = await response.json();
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (result.orderCancelled) {
+            setCompletedOrder(current => current ? { ...current, status: 'cancelled' } : current);
+            setCryptoPayment(current => current ? { ...current, status: 'expired' } : current);
+            setCryptoError(result.error || 'Este pedido expirou após 24 horas sem pagamento.');
+          }
+          return;
+        }
         setCryptoPayment(result);
         if (result.orderPaid) {
           setCompletedOrder(result.order || (completedOrder ? { ...completedOrder, status: 'paid' } : completedOrder));

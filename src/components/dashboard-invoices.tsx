@@ -54,6 +54,7 @@ export function DashboardInvoices({ onNavigateOrders }: { onNavigateOrders?: () 
 					<TableBody>
 						{orders.slice(0, 6).map((order) => {
 							const isPaid = order.status === "paid";
+							const isCancelled = order.status === "cancelled";
 
 							return (
 								<TableRow key={order.id}>
@@ -86,10 +87,12 @@ export function DashboardInvoices({ onNavigateOrders }: { onNavigateOrders?: () 
 											className={
 												isPaid
 													? "bg-emerald-500/10 text-emerald-600 border-none"
-													: "bg-amber-500/10 text-amber-700 border-none"
+													: isCancelled
+														? "bg-rose-500/10 text-rose-700 border-none"
+														: "bg-amber-500/10 text-amber-700 border-none"
 											}
 										>
-											{isPaid ? "Aprovado" : "Pendente"}
+											{isPaid ? "Aprovado" : isCancelled ? "Cancelado" : "Pendente"}
 										</Badge>
 										{isPaid && order.items.some((item) => item.requiresFulfillment) && order.fulfillmentStatus !== "completed" && (
 											<Badge variant="outline" className={order.fulfillmentIssue === "insufficient_balance" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-blue-200 bg-blue-50 text-blue-700"}>

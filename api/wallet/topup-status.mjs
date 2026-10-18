@@ -47,7 +47,10 @@ export default async function handler(request, response) {
     }
 
     const status = String(provider.payment_status || stored.payment_status);
-    const mappedStatus = topupStatus(status);
+    const providerStatus = topupStatus(status);
+    const mappedStatus = topup.status === 'cancelled' && providerStatus !== 'paid'
+      ? 'cancelled'
+      : providerStatus;
     const updates = {
       payment_status: status,
       actually_paid: provider.actually_paid || provider.amount_received || stored.actually_paid || 0,
@@ -68,7 +71,7 @@ export default async function handler(request, response) {
       });
       if (creditError) throw creditError;
       balance = Number(credited.balance);
-    } else if (mappedStatus !== topup.status) {
+    } else if (mappedStatus !== topup.status && topup.status !== 'cancelled') {
       await supabaseAdmin.from('wallet_topups').update({ status: mappedStatus }).eq('id', topup.id);
     }
 

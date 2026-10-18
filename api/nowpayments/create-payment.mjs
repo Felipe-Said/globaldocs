@@ -39,13 +39,18 @@ export default async function handler(request, response) {
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id,total,status,payment_method,download_token,items')
+      .select('id,total,status,payment_method,download_token,items,created_at')
       .eq('id', orderId)
       .eq('download_token', downloadToken)
       .eq('payment_method', 'crypto')
       .single();
     if (orderError || !order) return json(response, 404, { error: 'Pedido não encontrado.' });
     if (order.status === 'paid') return json(response, 409, { error: 'Este pedido já foi pago.' });
+    if (order.status === 'cancelled') return json(response, 410, { error: 'Este pedido foi cancelado.' });
+    if (Date.now() - new Date(order.created_at).getTime() >= 24 * 60 * 60 * 1000) {
+      await supabaseAdmin.from('orders').update({ status: 'cancelled' }).eq('id', order.id).eq('status', 'pending');
+      return json(response, 410, { error: 'Este pedido expirou após 24 horas sem pagamento.' });
+    }
 
     const quote = await getNowPaymentsQuote(settings, order.total);
     if (!quote.meetsMinimum) {

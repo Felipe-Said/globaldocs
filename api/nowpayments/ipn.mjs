@@ -66,8 +66,9 @@ export default async function handler(request, response) {
       }).eq('payment_id', paymentId);
 
       if (isPaidStatus(status)) {
-        await supabaseAdmin.from('orders').update({ status: 'paid' }).eq('id', orderId).eq('payment_method', 'crypto');
-        await fulfillNpprOrder(orderId);
+        const { data: paidOrder } = await supabaseAdmin.from('orders').update({ status: 'paid' })
+          .eq('id', orderId).eq('payment_method', 'crypto').eq('status', 'pending').select('id').maybeSingle();
+        if (paidOrder) await fulfillNpprOrder(orderId);
       }
       return json(response, 200, { ok: true });
     }
@@ -93,8 +94,9 @@ export default async function handler(request, response) {
         p_provider_payment_id: paymentId,
       });
       if (error) throw error;
-    } else {
-      await supabaseAdmin.from('wallet_topups').update({ status: topupStatus(status) }).eq('id', topupPayment.topup_id);
+    } else if (status !== 'cancelled_by_customer') {
+      await supabaseAdmin.from('wallet_topups').update({ status: topupStatus(status) })
+        .eq('id', topupPayment.topup_id).eq('status', 'pending');
     }
 
     return json(response, 200, { ok: true });
