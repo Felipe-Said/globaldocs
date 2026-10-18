@@ -3,7 +3,7 @@ import { useStore } from '@/context/StoreContext';
 import { AdminLogin } from './AdminLogin';
 import {
   Bell, ChevronRight, ExternalLink, FolderTree, Image as ImageIcon, Key,
-  LayoutGrid, LogOut, Package, Settings, ShieldCheck, ShoppingBag, Store, Tag,
+  LayoutGrid, LogOut, Package, Settings, ShieldCheck, ShoppingBag, Store, Tag, Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/sidebar';
 
 const Dashboard = lazy(() => import('@/components/dashboard').then(module => ({ default: module.Dashboard })));
+const AdminUsers = lazy(() => import('./AdminUsers').then(module => ({ default: module.AdminUsers })));
 const AdminProducts = lazy(() => import('./AdminProducts').then(module => ({ default: module.AdminProducts })));
 const AdminCollections = lazy(() => import('./AdminCollections').then(module => ({ default: module.AdminCollections })));
 const AdminOrders = lazy(() => import('./AdminOrders').then(module => ({ default: module.AdminOrders })));
@@ -25,7 +26,7 @@ const AdminBanners = lazy(() => import('./AdminBanners').then(module => ({ defau
 const AdminSettings = lazy(() => import('./AdminSettings').then(module => ({ default: module.AdminSettings })));
 const AdminAPIs = lazy(() => import('./AdminAPIs').then(module => ({ default: module.AdminAPIs })));
 
-type AdminTab = 'overview' | 'products' | 'collections' | 'banners' | 'orders' | 'coupons' | 'apis' | 'settings';
+type AdminTab = 'overview' | 'users' | 'products' | 'collections' | 'banners' | 'orders' | 'coupons' | 'apis' | 'settings';
 
 type NavItem = {
   id: AdminTab;
@@ -40,6 +41,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: 'Operação',
     items: [
       { id: 'overview', label: 'Visão Geral & Métricas', shortLabel: 'Visão geral', icon: LayoutGrid },
+      { id: 'users', label: 'Usuários', shortLabel: 'Usuários', icon: Users },
       { id: 'products', label: 'Arquivos, LLC & Contas', shortLabel: 'Produtos', icon: Package },
       { id: 'collections', label: 'Coleções', shortLabel: 'Coleções', icon: FolderTree },
       { id: 'banners', label: 'Banners da Loja', shortLabel: 'Banners', icon: ImageIcon },
@@ -203,6 +205,7 @@ function AdminShell() {
         <main className="flex min-h-0 flex-1 flex-col p-4 sm:p-6 lg:p-8">
           <Suspense fallback={<AdminModuleSkeleton />}>
             {activeTab === 'overview' && <Dashboard onNavigateOrders={() => selectTab('orders')} />}
+            {activeTab === 'users' && <AdminUsers />}
             {activeTab === 'products' && <AdminProducts />}
             {activeTab === 'collections' && <AdminCollections />}
             {activeTab === 'banners' && <AdminBanners />}
