@@ -26,7 +26,7 @@ export const getBaseSiteUrl = (): string => {
   if (typeof window !== 'undefined' && window.location.origin) {
     return window.location.origin;
   }
-  return 'https://globaldocs.com.br';
+  return 'https://globaldocs.vercel.app';
 };
 
 /**

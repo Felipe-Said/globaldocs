@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin
 
 # Sitemap Oficial GlobalDOCS
-Sitemap: https://globaldocs.com.br/sitemap.xml
+Sitemap: https://globaldocs.vercel.app/sitemap.xml
