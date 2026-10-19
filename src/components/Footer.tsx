@@ -3,6 +3,7 @@ import { useStore } from '../context/StoreContext';
 import { Instagram, Mail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GATEWAY_LOGOS } from '../utils/gatewayLogos';
+import { getBrandLogoUrl } from '../utils/brandDetection';
 
 interface PaymentAvailability {
   pix: { enabled: boolean };
@@ -149,7 +150,7 @@ export const Footer: React.FC = () => {
                   <span>{settings.contactEmail}</span>
                 </a>
               </li>
-              <li>
+              <li className="flex flex-wrap items-center gap-2">
                 <a
                   href="https://www.instagram.com/globaldocs.sbs"
                   target="_blank"
@@ -158,7 +159,17 @@ export const Footer: React.FC = () => {
                   className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-borderSoft bg-white px-3 font-semibold text-ink transition-colors hover:border-primary/40 hover:bg-primary-tint hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
                 >
                   <Instagram className="h-4 w-4" aria-hidden="true" />
-                  <span>@globaldocs.sbs</span>
+                  <span>Instagram</span>
+                </a>
+                <a
+                  href="https://chat.whatsapp.com/Bqi4p3279UZ1IVXVkcVVMB?s=cl&p=i&ilr=4&iam=2"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Entrar no grupo de avisos da Global DOCs no WhatsApp"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-borderSoft bg-white px-3 font-semibold text-ink transition-colors hover:border-[#25D366]/50 hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2"
+                >
+                  <img src={getBrandLogoUrl('whatsapp')} alt="" className="h-[18px] w-[18px] object-contain" aria-hidden="true" />
+                  <span>Grupo de avisos</span>
                 </a>
               </li>
             </ul>
