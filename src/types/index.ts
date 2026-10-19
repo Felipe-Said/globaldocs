@@ -18,6 +18,7 @@ export interface Collection {
   name: string;
   slug: string;
   description: string;
+  subcategories?: string[];
   badgeColor?: string;
   active: boolean;
   homeOrder?: number;

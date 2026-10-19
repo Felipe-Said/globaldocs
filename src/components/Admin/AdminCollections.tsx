@@ -10,7 +10,9 @@ import {
   ExternalLink,
   ArrowUp,
   ArrowDown,
-  ListOrdered
+  ListOrdered,
+  Plus,
+  Tags
 } from 'lucide-react';
 
 export const AdminCollections: React.FC = () => {
@@ -22,6 +24,8 @@ export const AdminCollections: React.FC = () => {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const [subcategories, setSubcategories] = useState<string[]>([]);
+  const [subcategoryInput, setSubcategoryInput] = useState('');
   const [badgeColor, setBadgeColor] = useState('bg-blue-50 text-blue-800 border-blue-200');
   const [active, setActive] = useState(true);
   const [reorderingId, setReorderingId] = useState<string | null>(null);
@@ -46,6 +50,8 @@ export const AdminCollections: React.FC = () => {
     setName('');
     setSlug('');
     setDescription('');
+    setSubcategories([]);
+    setSubcategoryInput('');
     setBadgeColor('bg-blue-50 text-blue-800 border-blue-200');
     setActive(true);
     setIsModalOpen(true);
@@ -56,9 +62,21 @@ export const AdminCollections: React.FC = () => {
     setName(col.name);
     setSlug(col.slug);
     setDescription(col.description);
+    setSubcategories(Array.from(new Set([
+      ...(col.subcategories || []),
+      ...products.filter(product => product.collectionId === col.id).map(product => product.subcategory).filter((value): value is string => Boolean(value)),
+    ])));
+    setSubcategoryInput('');
     setBadgeColor(col.badgeColor || 'bg-blue-50 text-blue-800 border-blue-200');
     setActive(col.active);
     setIsModalOpen(true);
+  };
+
+  const addSubcategory = () => {
+    const value = subcategoryInput.trim();
+    if (!value || subcategories.some(item => item.toLocaleLowerCase('pt-BR') === value.toLocaleLowerCase('pt-BR'))) return;
+    setSubcategories(current => [...current, value]);
+    setSubcategoryInput('');
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -70,6 +88,7 @@ export const AdminCollections: React.FC = () => {
         name,
         slug: generatedSlug,
         description,
+        subcategories,
         badgeColor,
         active,
       });
@@ -78,6 +97,7 @@ export const AdminCollections: React.FC = () => {
         name,
         slug: generatedSlug,
         description,
+        subcategories,
         badgeColor,
         active,
       });
@@ -189,6 +209,20 @@ export const AdminCollections: React.FC = () => {
                 <p className="text-xs text-ink-muted line-clamp-3 leading-relaxed mb-3">
                   {col.description}
                 </p>
+                {(col.subcategories?.length || 0) > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-1.5" aria-label={`Subcoleções de ${col.name}`}>
+                    {col.subcategories!.slice(0, 4).map(subcategory => (
+                      <span key={subcategory} className="inline-flex min-h-6 items-center rounded-full border border-borderSoft bg-surface-warm px-2 text-[10px] font-semibold text-ink-muted">
+                        {subcategory}
+                      </span>
+                    ))}
+                    {col.subcategories!.length > 4 && (
+                      <span className="inline-flex min-h-6 items-center px-1 text-[10px] font-semibold text-ink-muted">
+                        +{col.subcategories!.length - 4}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div className="text-[11px] font-mono text-ink-faint flex items-center justify-between">
                   <span>slug: /{col.slug}</span>
                   <Link
@@ -271,6 +305,58 @@ export const AdminCollections: React.FC = () => {
                   className="w-full px-3 py-1.5 bg-surface-warm border border-borderSoft rounded-sm text-ink focus:bg-white focus:border-primary"
                 />
               </div>
+
+              <fieldset className="rounded-sm border border-borderSoft bg-surface-warm/60 p-3">
+                <legend className="px-1 text-xs font-bold text-ink">Subcoleções</legend>
+                <p className="mb-2 text-[11px] leading-relaxed text-ink-muted">
+                  Crie separações internas, como “Contas Gmail” e “Google Ads”. Elas ficarão disponíveis no cadastro dos produtos desta coleção.
+                </p>
+                <div className="flex gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Tags className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
+                    <input
+                      type="text"
+                      value={subcategoryInput}
+                      onChange={(event) => setSubcategoryInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          addSubcategory();
+                        }
+                      }}
+                      placeholder="Nome da subcoleção"
+                      className="h-11 w-full rounded-sm border border-borderSoft bg-white pl-9 pr-3 text-ink focus:border-primary"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addSubcategory}
+                    className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-sm bg-ink px-3 font-semibold text-white transition-colors hover:bg-black/80"
+                  >
+                    <Plus className="size-4" aria-hidden="true" />
+                    Adicionar
+                  </button>
+                </div>
+                {subcategories.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {subcategories.map(subcategory => (
+                      <span key={subcategory} className="inline-flex min-h-8 items-center gap-1 rounded-full border border-primary/20 bg-primary/10 pl-3 pr-1 text-[11px] font-semibold text-primary">
+                        {subcategory}
+                        <button
+                          type="button"
+                          onClick={() => setSubcategories(current => current.filter(item => item !== subcategory))}
+                          className="inline-flex size-7 items-center justify-center rounded-full transition-colors hover:bg-primary/10"
+                          aria-label={`Remover subcoleção ${subcategory}`}
+                        >
+                          <X className="size-3" aria-hidden="true" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-[10px] text-ink-muted">Nenhuma subcoleção cadastrada.</p>
+                )}
+              </fieldset>
 
               <div>
                 <label className="block font-medium text-ink mb-1">Estilo do Badge / Cor</label>

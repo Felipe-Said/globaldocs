@@ -77,8 +77,13 @@ export const CollectionView: React.FC = () => {
     collectionProducts.forEach(product => {
       if (product.subcategory) counts.set(product.subcategory, (counts.get(product.subcategory) || 0) + 1);
     });
-    return Array.from(counts, ([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-  }, [collectionProducts]);
+    const configuredOrder = new Map((collection?.subcategories || []).map((name, index) => [name, index]));
+    return Array.from(counts, ([name, count]) => ({ name, count })).sort((a, b) => {
+      const orderA = configuredOrder.get(a.name) ?? Number.MAX_SAFE_INTEGER;
+      const orderB = configuredOrder.get(b.name) ?? Number.MAX_SAFE_INTEGER;
+      return orderA - orderB || a.name.localeCompare(b.name, 'pt-BR');
+    });
+  }, [collection?.subcategories, collectionProducts]);
 
   useEffect(() => setSelectedSubcategory('all'), [collection?.id]);
 

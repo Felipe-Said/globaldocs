@@ -28,6 +28,7 @@ import { UsdtEstimate } from './UsdtEstimate';
 export const ProductDetailModal: React.FC = () => {
   const { selectedProduct, setSelectedProduct, addToCart, updateCartQuantity, setIsCartOpen, cart, collections } = useStore();
   const [quantity, setQuantity] = React.useState(1);
+  const closeButtonRef = React.useRef<HTMLButtonElement>(null);
 
   React.useEffect(() => {
     if (selectedProduct) {
@@ -48,6 +49,21 @@ export const ProductDetailModal: React.FC = () => {
     const current = cart.find(item => item.product.id === selectedProduct.id);
     setQuantity(current?.quantity || Math.max(1, Number(selectedProduct.minimumOrder || 1)));
   }, [selectedProduct?.id]);
+
+  React.useEffect(() => {
+    if (!selectedProduct) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedProduct(null);
+    };
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', closeOnEscape);
+    window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [selectedProduct?.id, setSelectedProduct]);
 
   if (!selectedProduct) return null;
 
@@ -97,52 +113,55 @@ export const ProductDetailModal: React.FC = () => {
 
   return (
     <div 
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-6 animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/55 p-0 backdrop-blur-xs animate-fadeIn sm:items-center sm:p-6"
       onClick={() => setSelectedProduct(null)}
     >
       <div 
-        className="bg-surface w-full max-w-3xl rounded-t-2xl sm:rounded-md border border-borderSoft shadow-notion-modal overflow-hidden relative flex flex-col max-h-[90vh] animate-slideUpMobile sm:animate-fadeIn"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="product-detail-title"
+        className="relative flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden border-0 bg-surface shadow-notion-modal animate-slideUpMobile sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-md sm:border sm:border-borderSoft sm:animate-fadeIn"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile Drag Notch Handle */}
-        <div className="w-12 h-1.5 rounded-full bg-borderSoft/80 mx-auto mt-2.5 sm:hidden" />
+        <div className="absolute left-1/2 top-2 z-10 h-1 w-10 -translate-x-1/2 rounded-full bg-borderSoft sm:hidden" aria-hidden="true" />
 
         {/* Header Bar */}
-        <div className="p-4 sm:p-6 border-b border-borderSoft flex items-start justify-between bg-surface">
-          <div>
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+        <div className="flex shrink-0 items-start justify-between border-b border-borderSoft bg-surface px-4 pb-3 pt-[max(1.25rem,env(safe-area-inset-top))] sm:p-6">
+          <div className="min-w-0 flex-1 pr-1">
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5 sm:mb-2 sm:gap-2">
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border whitespace-nowrap shrink-0 ${typeInfo.color}`}>
                 <TypeIcon className="w-3 h-3 shrink-0" />
                 {typeInfo.label}
               </span>
-              {detectedCountries.length > 0 && (
-                <CountryBadgesList countries={detectedCountries} size="sm" />
-              )}
+              {detectedCountries.length > 0 && <div className="hidden sm:block"><CountryBadgesList countries={detectedCountries} size="sm" /></div>}
               {collection && (
-                <span className="whitespace-nowrap shrink-0 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold bg-surface-warm text-ink-muted border border-borderSoft">
-                  📁 {collection.name}
+                <span className="inline-flex max-w-[180px] shrink-0 items-center gap-1 truncate whitespace-nowrap rounded-full border border-borderSoft bg-surface-warm px-2 py-0.5 text-[10px] font-semibold text-ink-muted sm:max-w-none sm:text-xs">
+                  <Package className="size-3 shrink-0" aria-hidden="true" /> {collection.name}
                 </span>
               )}
-              <span className="whitespace-nowrap shrink-0 text-[10px] sm:text-xs text-ink-muted">
+              <span className="hidden whitespace-nowrap text-xs text-ink-muted sm:inline">
                 {selectedProduct.version}
               </span>
             </div>
-            <h2 className="text-xl sm:text-3xl font-bold text-ink tracking-tight leading-snug sm:leading-tight">
+            <h2 id="product-detail-title" className="line-clamp-3 text-lg font-bold leading-snug tracking-tight text-ink sm:text-3xl sm:leading-tight">
               {selectedProduct.title}
             </h2>
           </div>
 
           <button
+            ref={closeButtonRef}
+            type="button"
             onClick={() => setSelectedProduct(null)}
-            className="w-8 h-8 rounded-sm flex items-center justify-center text-ink-muted hover:text-ink hover:bg-black/[0.05] transition-colors cursor-pointer shrink-0 ml-2"
-            aria-label="Fechar"
+            className="ml-2 flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-surface-warm text-ink-muted transition-colors hover:bg-black/[0.08] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            aria-label="Fechar detalhes do produto"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Scrollable Content Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 pb-6 sm:space-y-6 sm:p-6">
           {/* Subtitle / Tagline */}
           <p className="text-xs sm:text-base text-ink-muted leading-relaxed">
             {selectedProduct.tagline}
@@ -267,6 +286,15 @@ export const ProductDetailModal: React.FC = () => {
             </div>
           </div>
 
+          {/* Resumo de valor para telas pequenas */}
+          <div className="rounded-xl border border-borderSoft bg-surface-warm/70 p-3.5 sm:hidden">
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">Valor do item</div>
+              <div className="mt-0.5 text-xl font-bold tracking-tight text-ink">{formatPrice(selectedProduct.price * quantity)}</div>
+              <UsdtEstimate amount={selectedProduct.price * quantity} compact />
+            </div>
+          </div>
+
           {/* Description */}
           <div>
             <h4 className="font-bold text-ink mb-1.5 uppercase tracking-wider text-[11px] text-ink-muted">
@@ -307,31 +335,38 @@ export const ProductDetailModal: React.FC = () => {
         </div>
 
         {/* Footer Checkout Action */}
-        <div className="p-3.5 sm:p-5 border-t border-borderSoft bg-surface-warm flex flex-col sm:flex-row sm:items-end justify-between gap-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <div>
-            <div className="text-[10px] sm:text-xs text-ink-muted">Total:</div>
+        <div className="flex shrink-0 flex-col gap-2.5 border-t border-borderSoft bg-surface-warm px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:p-5">
+          <div className="flex min-w-0 items-end justify-between sm:block">
+            <div>
+            <div className="text-[10px] text-ink-muted sm:text-xs">Total:</div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-xl sm:text-2xl font-bold text-ink">
+              <span className="truncate text-lg font-bold text-ink sm:text-2xl">
                 {formatPrice(selectedProduct.price * quantity)}
               </span>
               {selectedProduct.originalPrice && (
-                <span className="text-xs text-ink-faint line-through">
-                  {formatPrice(selectedProduct.originalPrice)}
+                <span className="hidden text-xs text-ink-faint line-through sm:inline">
+                  {formatPrice(selectedProduct.originalPrice * quantity)}
                 </span>
               )}
             </div>
-            <UsdtEstimate amount={selectedProduct.price * quantity} compact />
+            </div>
+            {usesQuantity && (
+              <span className="pb-0.5 text-[10px] font-medium text-ink-muted sm:hidden">
+                {selectedProduct.unlimitedStock ? 'Disponibilidade contínua' : `${maximumQuantity.toLocaleString('pt-BR')} disponíveis`}
+              </span>
+            )}
+            <div className="hidden sm:block"><UsdtEstimate amount={selectedProduct.price * quantity} compact /></div>
             {selectedProduct.downloadsCount > 0 && (
-              <div className="text-[11px] text-ink-muted flex items-center gap-1.5 mt-1 font-medium">
+              <div className="mt-1 hidden items-center gap-1.5 text-[11px] font-medium text-ink-muted sm:flex">
                 <Download className="w-3 h-3 text-ink-muted shrink-0" />
                 <span>{selectedProduct.downloadsCount.toLocaleString('pt-BR')} solicitações confirmadas</span>
               </div>
             )}
           </div>
 
-          <div className="flex items-end gap-2 w-full sm:w-auto">
+          <div className="flex w-full items-stretch gap-2 sm:w-auto sm:shrink-0 sm:items-end">
             {usesQuantity && (
-              <div>
+              <div className="hidden sm:block">
                 <label htmlFor="product-quantity" className="block text-[10px] font-semibold text-ink-muted mb-1">
                   Quantidade {minimumQuantity > 1 ? `(mín. ${minimumQuantity})` : ''}
                 </label>
@@ -370,11 +405,44 @@ export const ProductDetailModal: React.FC = () => {
                 </div>
               </div>
             )}
+            {usesQuantity && (
+              <div className="flex h-12 shrink-0 items-center overflow-hidden rounded-lg border border-borderSoft bg-white sm:hidden">
+                <button
+                  type="button"
+                  onClick={() => changeQuantity(quantity - 1)}
+                  disabled={quantity <= minimumQuantity}
+                  className="inline-flex h-12 w-11 items-center justify-center text-ink transition-colors hover:bg-surface-warm disabled:cursor-not-allowed disabled:opacity-35"
+                  aria-label="Diminuir quantidade"
+                >
+                  <Minus className="size-4" />
+                </button>
+                <input
+                  id="product-quantity-mobile"
+                  type="number"
+                  inputMode="numeric"
+                  min={minimumQuantity}
+                  max={maximumQuantity}
+                  value={quantity}
+                  onChange={event => changeQuantity(Number(event.target.value))}
+                  className="h-12 w-11 border-x border-borderSoft text-center text-sm font-bold text-ink focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary/20"
+                  aria-label="Quantidade do produto"
+                />
+                <button
+                  type="button"
+                  onClick={() => changeQuantity(quantity + 1)}
+                  disabled={quantity >= maximumQuantity}
+                  className="inline-flex h-12 w-11 items-center justify-center text-ink transition-colors hover:bg-surface-warm disabled:cursor-not-allowed disabled:opacity-35"
+                  aria-label="Aumentar quantidade"
+                >
+                  <Plus className="size-4" />
+                </button>
+              </div>
+            )}
             <button
               onClick={handleBuyNow}
-              className="h-11 px-5 sm:px-6 rounded-sm bg-primary hover:bg-primary-pressed text-white text-xs font-semibold flex-1 sm:flex-none flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+              className="flex h-12 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-pressed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 sm:h-11 sm:flex-none sm:rounded-sm sm:px-6 sm:text-xs"
             >
-              <span>{cartItem ? 'Atualizar e comprar' : 'Comprar Agora'}</span>
+              <span>{cartItem ? 'Atualizar compra' : 'Comprar agora'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

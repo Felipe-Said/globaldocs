@@ -64,6 +64,7 @@ export const AdminProducts: React.FC = () => {
     collections,
     addProduct, 
     updateProduct, 
+    updateCollection,
     deleteProduct, 
     toggleProductStatus,
     downloadFile 
@@ -82,6 +83,7 @@ export const AdminProducts: React.FC = () => {
   const [category, setCategory] = useState<FileCategory>('Documentos Legais');
   const [productType, setProductType] = useState<ProductType>('digital');
   const [collectionId, setCollectionId] = useState<string>('');
+  const [subcategory, setSubcategory] = useState('');
   const [price, setPrice] = useState('49.90');
   const [originalPrice, setOriginalPrice] = useState('99.00');
   const [format, setFormat] = useState<FileFormat>('DOCX');
@@ -117,6 +119,7 @@ export const AdminProducts: React.FC = () => {
     setCategory('Documentos Legais');
     setProductType('digital');
     setCollectionId(collections[0]?.id || '');
+    setSubcategory('');
     setPrice('49.90');
     setOriginalPrice('99.00');
     setFormat('ZIP');
@@ -154,6 +157,7 @@ export const AdminProducts: React.FC = () => {
     setCategory(product.category);
     setProductType(product.productType || 'digital');
     setCollectionId(product.collectionId || '');
+    setSubcategory(product.subcategory || '');
     setPrice(product.price.toString());
     setOriginalPrice(product.originalPrice ? product.originalPrice.toString() : '');
     setFormat(product.format);
@@ -184,7 +188,7 @@ export const AdminProducts: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const tags = tagsStr.split(',').map(t => t.trim()).filter(Boolean);
     const features = featuresStr.split('\n').map(f => f.trim()).filter(Boolean);
@@ -195,6 +199,7 @@ export const AdminProducts: React.FC = () => {
       category,
       productType,
       collectionId: collectionId || undefined,
+      subcategory: subcategory.trim() || undefined,
       price: parseFloat(price) || 0,
       originalPrice: originalPrice ? parseFloat(originalPrice) : undefined,
       format: deliverySpeed === 'immediate' && format !== 'ZIP' ? 'ZIP' : format,
@@ -227,9 +232,17 @@ export const AdminProducts: React.FC = () => {
     };
 
     if (editingProduct) {
-      updateProduct(editingProduct.id, productPayload);
+      await updateProduct(editingProduct.id, productPayload);
     } else {
-      addProduct(productPayload);
+      await addProduct(productPayload);
+    }
+
+    const linkedCollection = collections.find(item => item.id === collectionId);
+    const normalizedSubcategory = subcategory.trim();
+    if (linkedCollection && normalizedSubcategory && !(linkedCollection.subcategories || []).some(item => item.toLocaleLowerCase('pt-BR') === normalizedSubcategory.toLocaleLowerCase('pt-BR'))) {
+      await updateCollection(linkedCollection.id, {
+        subcategories: [...(linkedCollection.subcategories || []), normalizedSubcategory],
+      });
     }
 
     setIsModalOpen(false);
@@ -247,6 +260,12 @@ export const AdminProducts: React.FC = () => {
   const formatPrice = (value: number) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
+
+  const selectedCollection = collections.find(item => item.id === collectionId);
+  const availableSubcategories = Array.from(new Set([
+    ...(selectedCollection?.subcategories || []),
+    ...products.filter(product => product.collectionId === collectionId).map(product => product.subcategory).filter((value): value is string => Boolean(value)),
+  ]));
 
   const getTypeBadge = (type: string) => {
     const lower = (type || '').toLowerCase();
@@ -420,7 +439,7 @@ export const AdminProducts: React.FC = () => {
                         ) : null}
                         {col && (
                           <div className="text-[10px] text-ink-muted truncate max-w-[150px]">
-                            {col.name}
+                            {col.name}{product.subcategory ? ` / ${product.subcategory}` : ''}
                           </div>
                         )}
                       </div>
@@ -528,7 +547,7 @@ export const AdminProducts: React.FC = () => {
             <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-4 text-xs">
               
               {/* Type and Collection selection - Especificação Manual pelo Admin */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-surface-warm rounded-sm border border-borderSoft">
+              <div className="grid grid-cols-1 gap-3 rounded-sm border border-borderSoft bg-surface-warm p-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block font-bold text-ink">Tipo de Produto ou Serviço</label>
@@ -566,12 +585,35 @@ export const AdminProducts: React.FC = () => {
                   <label className="block font-bold text-ink mb-1">Vincular à Coleção</label>
                   <select
                     value={collectionId}
-                    onChange={(e) => setCollectionId(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-white border border-borderSoft rounded-sm text-ink focus:border-primary"
+                    onChange={(e) => {
+                      setCollectionId(e.target.value);
+                      setSubcategory('');
+                    }}
+                    className="h-11 w-full rounded-sm border border-borderSoft bg-white px-2.5 text-ink focus:border-primary"
                   >
                     <option value="">Sem Coleção Específica</option>
                     {collections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
+                </div>
+
+                <div>
+                  <label htmlFor="product-subcategory" className="mb-1 block font-bold text-ink">Subcoleção</label>
+                  <input
+                    id="product-subcategory"
+                    type="text"
+                    list="product-subcategory-options"
+                    value={subcategory}
+                    onChange={(event) => setSubcategory(event.target.value)}
+                    disabled={!collectionId}
+                    placeholder={collectionId ? 'Selecione ou digite uma nova' : 'Selecione uma coleção primeiro'}
+                    className="h-11 w-full rounded-sm border border-borderSoft bg-white px-2.5 text-ink focus:border-primary disabled:cursor-not-allowed disabled:bg-black/[0.03] disabled:text-ink-faint"
+                  />
+                  <datalist id="product-subcategory-options">
+                    {availableSubcategories.map(item => <option key={item} value={item} />)}
+                  </datalist>
+                  <p className="mt-1 text-[10px] leading-relaxed text-ink-muted">
+                    Ao digitar uma nova, ela também será adicionada à coleção.
+                  </p>
                 </div>
               </div>
 
