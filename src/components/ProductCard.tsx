@@ -5,6 +5,7 @@ import { detectBrands } from '../utils/brandDetection';
 import { BrandLogosList } from './BrandLogos';
 import { detectCountries } from '../utils/countryDetection';
 import { CountryBadgesList } from './CountryBadge';
+import { extractAdAccountMetadata } from '../utils/adAccountMetadata.mjs';
 import { 
   Download, 
   FileCode, 
@@ -23,8 +24,9 @@ import {
   Briefcase,
   Zap,
   Clock,
-  Rocket
-  ,Layers
+  Rocket,
+  Layers,
+  BadgeInfo
 } from 'lucide-react';
 
 interface ProductCardProps {
@@ -79,6 +81,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const isInCart = cart.some(item => item.product.id === product.id);
   const detectedBrands = detectBrands(product);
   const detectedCountries = detectCountries(product);
+  const adAccountFacts = extractAdAccountMetadata(product).slice(0, 4);
 
   const formatPrice = (value: number) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -144,6 +147,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <p className="text-xs text-ink-muted line-clamp-2 leading-relaxed mb-3">
           {product.tagline}
         </p>
+
+        {adAccountFacts.length > 0 && (
+          <section
+            className="mb-3 rounded-sm border border-borderSoft bg-surface-warm/70 px-2.5 py-2"
+            aria-label="Informações do item"
+          >
+            <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+              <BadgeInfo className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+              <span>Dados informados</span>
+            </div>
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+              {adAccountFacts.map((fact) => (
+                <div key={fact.key} className="min-w-0">
+                  <dt className="truncate text-[9px] leading-tight text-ink-faint" title={fact.label}>
+                    {fact.label}
+                  </dt>
+                  <dd className="mt-0.5 truncate text-[10px] font-semibold leading-tight text-ink tabular-nums" title={fact.value}>
+                    {fact.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
 
         {/* Delivery / Agilidade Notice */}
         {product.deliverySpeed === 'immediate' || product.deliveryTime?.toLowerCase().includes('imediato') ? (

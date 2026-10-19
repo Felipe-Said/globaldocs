@@ -60,6 +60,11 @@ export interface DigitalProduct {
   accessLogins?: string; // Logins e credenciais de acesso
   proxyDetails?: string; // Proxies (IP:Porta:User:Pass)
   accessInstructions?: string; // Instruções de uso/conexão
+  // Supplier metadata (internal only; never render the supplier name publicly)
+  supplier?: string;
+  supplierProductId?: string;
+  supplierCategory?: string;
+  supplierPriceUsd?: number;
   // SEO & Ranqueamento
   seoTitle?: string;
   seoDescription?: string;
