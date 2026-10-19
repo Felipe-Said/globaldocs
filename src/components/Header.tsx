@@ -53,20 +53,6 @@ export const Header: React.FC = () => {
             >
               Catálogo de Arquivos
             </Link>
-            <Link
-              to="/conta"
-              className={`h-[30px] px-3 rounded-xs text-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
-                location.pathname === '/conta' || location.pathname === '/downloads'
-                  ? 'bg-primary-tint text-primary-pressed font-semibold'
-                  : 'text-ink/90 hover:bg-black/[0.05]'
-              }`}
-            >
-              <UserRound className="w-3.5 h-3.5" />
-              <span>{customerUser ? 'Minha Conta' : 'Entrar'}</span>
-              {customerUser && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title={`Conectado como ${customerUser.email}`} />
-              )}
-            </Link>
           </nav>
         </div>
 
@@ -106,6 +92,22 @@ export const Header: React.FC = () => {
               <Search className="w-3.5 h-3.5" />
             </button>
           )}
+
+          {/* Customer access stays grouped with the cart on desktop */}
+          <Link
+            to="/conta"
+            className={`hidden h-9 items-center gap-1.5 rounded-sm px-3 text-xs font-semibold transition-colors md:flex ${
+              location.pathname === '/conta' || location.pathname === '/downloads'
+                ? 'bg-primary-tint text-primary-pressed'
+                : 'border border-borderSoft bg-white text-ink hover:border-primary/30 hover:bg-primary-tint hover:text-primary'
+            }`}
+          >
+            <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{customerUser ? 'Minha Conta' : 'Entrar'}</span>
+            {customerUser && (
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" title={`Conectado como ${customerUser.email}`} />
+            )}
+          </Link>
 
           {/* Cart Trigger Button */}
           <button
